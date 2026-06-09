@@ -174,11 +174,9 @@ moon run cmd/main --target native -- <user>@<host> [--port 22] [--exec "ls -l"] 
 示例：
 
 ```bash
-# 交互式（用 SSH agent 或预置公钥的服务器）
-moon run cmd/main --target native -- alice@example.com --exec "uname -a"
+export MOONBIT_CLI_ARGS="xxx@xxx.xxx.xxx.xxx --port 22 --exec 'uname -a'"
 
-# 显式密码
-moon run cmd/main --target native -- bob@192.168.1.10 --port 2222 --password hunter2 --exec "uptime"
+moon run cmd/main --target native
 ```
 
 ### 4.4 作为库使用
