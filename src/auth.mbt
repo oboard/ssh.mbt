@@ -54,7 +54,7 @@ pub fn build_service_request(service : String) -> Bytes {
 pub fn build_userauth_request(
   user : String,
   service : String,
-  auth_method  : String,
+  auth_method : String,
   has_signature? : Bool,
   pubkey_alg? : String,
   pubkey_blob? : Bytes,

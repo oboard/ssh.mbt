@@ -18,7 +18,7 @@ fn main {
     msg => {
       println("error: " + msg.to_string())
       println(
-        "usage: moon run cmd/main --target native -- user@host [--port 22] [--exec CMD] [--password PWD]",
+        "usage: moonssh user@host [--port 22] [--exec CMD] [--password PWD]",
       )
       abort("invalid arguments")
     }
