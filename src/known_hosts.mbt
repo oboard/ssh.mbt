@@ -176,6 +176,7 @@ pub fn decode_base64(s : String) -> Bytes raise SshError {
       bits = bits - 8
       let byte = ((n >> bits) & 0xff).to_byte()
       buf = buf + Bytes::from_array([byte])
+      n = n & ((1 << bits) - 1)
     }
   }
   buf
@@ -193,23 +194,35 @@ pub fn encode_base64(bytes : Bytes) -> String {
     let b1 = arr.unsafe_get(i + 1).to_int()
     let b2 = arr.unsafe_get(i + 2).to_int()
     out = out +
-      alphabet.unsafe_get((b0 >> 2) & 0x3f).to_string() +
-      alphabet.unsafe_get(((b0 << 4) | (b1 >> 4)) & 0x3f).to_string() +
-      alphabet.unsafe_get(((b1 << 2) | (b2 >> 6)) & 0x3f).to_string() +
-      alphabet.unsafe_get(b2 & 0x3f).to_string()
+      alphabet.unsafe_get((b0 >> 2) & 0x3f).unsafe_to_char().to_string() +
+      alphabet
+      .unsafe_get(((b0 << 4) | (b1 >> 4)) & 0x3f)
+      .unsafe_to_char()
+      .to_string() +
+      alphabet
+      .unsafe_get(((b1 << 2) | (b2 >> 6)) & 0x3f)
+      .unsafe_to_char()
+      .to_string() +
+      alphabet.unsafe_get(b2 & 0x3f).unsafe_to_char().to_string()
     i = i + 3
   }
   if i < len {
     let b0 = arr.unsafe_get(i).to_int()
-    out = out + alphabet.unsafe_get((b0 >> 2) & 0x3f).to_string()
+    out = out +
+      alphabet.unsafe_get((b0 >> 2) & 0x3f).unsafe_to_char().to_string()
     if i + 1 < len {
       let b1 = arr.unsafe_get(i + 1).to_int()
       out = out +
-        alphabet.unsafe_get(((b0 << 4) | (b1 >> 4)) & 0x3f).to_string() +
-        alphabet.unsafe_get((b1 << 2) & 0x3f).to_string() +
+        alphabet
+        .unsafe_get(((b0 << 4) | (b1 >> 4)) & 0x3f)
+        .unsafe_to_char()
+        .to_string() +
+        alphabet.unsafe_get((b1 << 2) & 0x3f).unsafe_to_char().to_string() +
         "="
     } else {
-      out = out + alphabet.unsafe_get((b0 << 4) & 0x3f).to_string() + "=="
+      out = out +
+        alphabet.unsafe_get((b0 << 4) & 0x3f).unsafe_to_char().to_string() +
+        "=="
     }
   }
   out

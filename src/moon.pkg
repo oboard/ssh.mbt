@@ -16,5 +16,10 @@ options(
     "ssh_client.mbt": [ "native" ],
     "digest_wbtest.mbt": [ "native" ],
     "cipher_wbtest.mbt": [ "native" ],
+    "mac_wbtest.mbt": [ "native" ],
+    "kex_wbtest.mbt": [ "native" ],
+    "auth_wbtest.mbt": [ "native" ],
+    "channel_wbtest.mbt": [ "native" ],
+    "known_hosts_wbtest.mbt": [ "native" ],
   },
 )
