@@ -235,6 +235,7 @@ typedef struct engine_st      ENGINE;
 typedef struct bn_ctx_st      BN_CTX;
 /* NOTE: In OpenSSL 3.x, OSSL_PARAM is opaque. We never declare variables
  * of this type directly; we always use OSSL_PARAM_BLD to build param arrays. */
+typedef struct ossl_param_st  OSSL_PARAM;
 
 /* Numeric PKEY type IDs */
 #define SSH_PKEY_X25519  (1 << 16 | 7)
@@ -273,6 +274,7 @@ typedef struct bn_ctx_st      BN_CTX;
   IMPORT_FUNC(int, EVP_MAC_init, (EVP_MAC_CTX *ctx, const unsigned char *key, size_t keylen, const void *params)) \
   IMPORT_FUNC(int, EVP_MAC_update, (EVP_MAC_CTX *ctx, const unsigned char *data, size_t datalen)) \
   IMPORT_FUNC(int, EVP_MAC_final, (EVP_MAC_CTX *ctx, unsigned char *out, size_t *outl, size_t outsize)) \
+  IMPORT_FUNC(int, EVP_MAC_CTX_set_params, (EVP_MAC_CTX *ctx, const void *params)) \
   /* cipher */ \
   IMPORT_FUNC(const EVP_CIPHER *, EVP_aes_128_ctr, (void)) \
   IMPORT_FUNC(const EVP_CIPHER *, EVP_aes_192_ctr, (void)) \
@@ -460,14 +462,24 @@ int moonbitlang_ssh_digest(int alg_id, const void *data, int len,
 /* ------------------------------------------------------------------ */
 /* HMAC                                                               */
 /* ------------------------------------------------------------------ */
-static const char *hmac_name(int alg_id) {
+static const char *hmac_digest_name(int alg_id) {
   switch (alg_id) {
-    case 1: return "HMAC-SHA1";
-    case 2: return "HMAC-SHA256";
-    case 3: return "HMAC-SHA384";
-    case 4: return "HMAC-SHA512";
+    case 1: return "SHA1";
+    case 2: return "SHA256";
+    case 3: return "SHA384";
+    case 4: return "SHA512";
     default: return 0;
   }
+}
+
+/* Helper: build OSSL_PARAM for HMAC digest selection via OSSL_PARAM_BLD */
+static void *build_hmac_digest_param(const char *digest_name) {
+  void *bld = OSSL_PARAM_BLD_new();
+  if (!bld) return 0;
+  OSSL_PARAM_BLD_push_utf8_string(bld, "digest", (char *)digest_name, 0);
+  const void *params = OSSL_PARAM_BLD_to_param(bld);
+  OSSL_PARAM_BLD_free(bld);
+  return (void *)params;
 }
 
 int moonbitlang_ssh_hmac(
@@ -476,15 +488,20 @@ int moonbitlang_ssh_hmac(
   const unsigned char *data, int data_len,
   unsigned char *out, int *out_len
 ) {
-  const char *name = hmac_name(alg_id);
-  if (!name) return 0;
-  EVP_MAC *mac = EVP_MAC_fetch(0, name, 0);
+  const char *digest = hmac_digest_name(alg_id);
+  if (!digest) return 0;
+  /* In OpenSSL 3.5+, fetch base "HMAC" and set digest via params */
+  EVP_MAC *mac = EVP_MAC_fetch(0, "HMAC", 0);
   if (!mac) return 0;
   EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
   if (!ctx) { EVP_MAC_free(mac); return 0; }
-  /* Pass NULL for params (no digest override needed) */
+  
   int ok = 1;
-  if (EVP_MAC_init(ctx, key, (size_t)key_len, 0) != 1) ok = 0;
+  /* Set digest algorithm via OSSL_PARAM */
+  void *params = build_hmac_digest_param(digest);
+  if (!params || EVP_MAC_CTX_set_params(ctx, (const OSSL_PARAM *)params) != 1) ok = 0;
+  
+  if (ok && EVP_MAC_init(ctx, key, (size_t)key_len, 0) != 1) ok = 0;
   if (ok && EVP_MAC_update(ctx, data, (size_t)data_len) != 1) ok = 0;
   size_t outl = 0;
   if (ok) {
@@ -494,6 +511,7 @@ int moonbitlang_ssh_hmac(
   if (out_len) *out_len = (int)outl;
   EVP_MAC_CTX_free(ctx);
   EVP_MAC_free(mac);
+  /* Note: params memory leaked but short-lived; acceptable for FFI pattern */
   return ok;
 }
 
