@@ -23,182 +23,15 @@
  */
 
 /* ---------------------------------------------------------------------------
- * Windows stub: provide symbol definitions so the linker is satisfied.
+ * Windows and POSIX common headers
  * --------------------------------------------------------------------------- */
 #ifdef _WIN32
-
+#include <windows.h>
 #include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <moonbit.h>
-
-int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
-  (void)major; (void)minor; (void)fix;
-  return 1;
-}
-
-int moonbitlang_ssh_peek_error_code(void) { return 0; }
-
-int moonbitlang_ssh_get_error_string(void *buf) {
-  if (buf) ((char *)buf)[0] = '\0';
-  return 0;
-}
-
-void moonbitlang_ssh_clear_error(void) { }
-
-int moonbitlang_ssh_rand_bytes(unsigned char *buf, int num) {
-  (void)buf; (void)num;
-  return 0;
-}
-
-void *moonbitlang_ssh_md_ctx_new(void) { return 0; }
-void moonbitlang_ssh_md_ctx_free(void *ctx) { (void)ctx; }
-int moonbitlang_ssh_md_size(int alg_id) { (void)alg_id; return 0; }
-int moonbitlang_ssh_md_init(void *ctx, int alg_id) { (void)ctx; (void)alg_id; return 0; }
-int moonbitlang_ssh_md_update(void *ctx, const void *data, int len) {
-  (void)ctx; (void)data; (void)len; return 0;
-}
-int moonbitlang_ssh_md_final(void *ctx, unsigned char *out, int *out_len) {
-  (void)ctx; (void)out; if (out_len) *out_len = 0; return 0;
-}
-int moonbitlang_ssh_digest(int alg_id, const void *data, int len,
-                           unsigned char *out, int *out_len) {
-  (void)alg_id; (void)data; (void)len; (void)out;
-  if (out_len) *out_len = 0;
-  return 0;
-}
-
-int moonbitlang_ssh_hmac(int alg_id,
-                        const unsigned char *key, int key_len,
-                        const unsigned char *data, int data_len,
-                        unsigned char *out, int *out_len) {
-  (void)alg_id; (void)key; (void)key_len;
-  (void)data; (void)data_len; (void)out;
-  if (out_len) *out_len = 0;
-  return 0;
-}
-
-void *moonbitlang_ssh_cipher_ctx_new(void) { return 0; }
-void moonbitlang_ssh_cipher_ctx_free(void *ctx) { (void)ctx; }
-int moonbitlang_ssh_cipher_iv_len(int alg_id) { (void)alg_id; return 0; }
-int moonbitlang_ssh_cipher_key_len(int alg_id) { (void)alg_id; return 0; }
-int moonbitlang_ssh_cipher_tag_len(int alg_id) { (void)alg_id; return 0; }
-int moonbitlang_ssh_cipher_init(void *ctx, int alg_id, int encrypt,
-                                const unsigned char *key, const unsigned char *iv) {
-  (void)ctx; (void)alg_id; (void)encrypt; (void)key; (void)iv; return 0;
-}
-int moonbitlang_ssh_cipher_set_iv_len(void *ctx, int iv_len) {
-  (void)ctx; (void)iv_len; return 0;
-}
-int moonbitlang_ssh_cipher_set_tag(void *ctx, const unsigned char *tag, int tag_len) {
-  (void)ctx; (void)tag; (void)tag_len; return 0;
-}
-int moonbitlang_ssh_cipher_get_tag(void *ctx, unsigned char *tag, int tag_len) {
-  (void)ctx; (void)tag; (void)tag_len; return 0;
-}
-int moonbitlang_ssh_cipher_update(void *ctx, int encrypt,
-                                  const unsigned char *in, int in_len,
-                                  unsigned char *out, int *out_len) {
-  (void)ctx; (void)encrypt; (void)in; (void)in_len; (void)out;
-  if (out_len) *out_len = 0;
-  return 0;
-}
-int moonbitlang_ssh_cipher_final(void *ctx, int encrypt,
-                                 unsigned char *out, int *out_len) {
-  (void)ctx; (void)encrypt; (void)out;
-  if (out_len) *out_len = 0;
-  return 0;
-}
-
-void *moonbitlang_ssh_pkey_new(void) { return 0; }
-void moonbitlang_ssh_pkey_free(void *pkey) { (void)pkey; }
-int moonbitlang_ssh_pkey_size(void *pkey) { (void)pkey; return 0; }
-int moonbitlang_ssh_pkey_get_id(void *pkey) { (void)pkey; return 0; }
-int moonbitlang_ssh_pkey_get_bits(void *pkey) { (void)pkey; return 0; }
-int moonbitlang_ssh_pkey_get_raw_public(void *pkey, unsigned char *buf, int *buf_len) {
-  (void)pkey; (void)buf; if (buf_len) *buf_len = 0; return 0;
-}
-int moonbitlang_ssh_pkey_get_raw_private(void *pkey, unsigned char *buf, int *buf_len) {
-  (void)pkey; (void)buf; if (buf_len) *buf_len = 0; return 0;
-}
-int moonbitlang_ssh_pkey_keygen(int key_type, int bits, void **out) {
-  (void)key_type; (void)bits; (void)out; return 0;
-}
-int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
-                              const unsigned char *tbs, int tbs_len,
-                              unsigned char *sig, int *sig_len) {
-  (void)pkey; (void)md_alg_id; (void)tbs; (void)tbs_len; (void)sig;
-  if (sig_len) *sig_len = 0;
-  return 0;
-}
-int moonbitlang_ssh_pkey_verify(void *pkey, int md_alg_id,
-                                const unsigned char *tbs, int tbs_len,
-                                const unsigned char *sig, int sig_len) {
-  (void)pkey; (void)md_alg_id; (void)tbs; (void)tbs_len; (void)sig; (void)sig_len;
-  return 0;
-}
-int moonbitlang_ssh_pkey_derive(void *our_pkey,
-                                const unsigned char *peer_pub, int peer_pub_len,
-                                unsigned char *out, int *out_len) {
-  (void)our_pkey; (void)peer_pub; (void)peer_pub_len; (void)out;
-  if (out_len) *out_len = 0;
-  return 0;
-}
-int moonbitlang_ssh_pkey_new_raw_private(int key_type,
-                                        const unsigned char *raw, int raw_len,
-                                        void **out) {
-  (void)key_type; (void)raw; (void)raw_len; (void)out; return 0;
-}
-int moonbitlang_ssh_pkey_new_rsa(const unsigned char *n, int n_len,
-                                 const unsigned char *e, int e_len,
-                                 const unsigned char *d, int d_len,
-                                 void **out) {
-  (void)n; (void)n_len; (void)e; (void)e_len; (void)d; (void)d_len; (void)out;
-  return 0;
-}
-int moonbitlang_ssh_pkey_new_ec(const unsigned char *scalar, int scalar_len,
-                                void **out) {
-  (void)scalar; (void)scalar_len; (void)out; return 0;
-}
-int moonbitlang_ssh_pkey_get_public_der(void *pkey, unsigned char **buf) {
-  (void)pkey; (void)buf; return 0;
-}
-int moonbitlang_ssh_pkey_get_private_der(void *pkey, unsigned char **buf) {
-  (void)pkey; (void)buf; return 0;
-}
-
-int moonbitlang_ssh_hkdf(int md_alg_id,
-                         const unsigned char *salt, int salt_len,
-                         const unsigned char *ikm, int ikm_len,
-                         const unsigned char *info, int info_len,
-                         unsigned char *okm, int okm_len) {
-  (void)md_alg_id; (void)salt; (void)salt_len; (void)ikm; (void)ikm_len;
-  (void)info; (void)info_len; (void)okm; (void)okm_len;
-  return 0;
-}
-
-void *moonbitlang_ssh_bn_new(void) { return 0; }
-void moonbitlang_ssh_bn_free(void *bn) { (void)bn; }
-int moonbitlang_ssh_bn_bin2bn(const unsigned char *buf, int len, void *bn) {
-  (void)buf; (void)len; (void)bn; return 0;
-}
-int moonbitlang_ssh_bn_bn2bin(void *bn, unsigned char *buf) {
-  (void)bn; (void)buf; return 0;
-}
-int moonbitlang_ssh_bn_bn2binpad(void *bn, unsigned char *buf, int len) {
-  (void)bn; (void)buf; (void)len; return 0;
-}
-int moonbitlang_ssh_bn_num_bytes(void *bn) { (void)bn; return 0; }
-int moonbitlang_ssh_bn_num_bits(void *bn) { (void)bn; return 0; }
-int moonbitlang_ssh_bn_mod_exp(void *r, void *a, void *p, void *m) {
-  (void)r; (void)a; (void)p; (void)m; return 0;
-}
-
-#endif /* _WIN32 */
-
-#ifndef _WIN32
-
+#else
 #include <dlfcn.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -363,9 +196,37 @@ IMPORTED_OPEN_SSL_FUNCTIONS
 #undef IMPORT_FUNC
 
 /* ------------------------------------------------------------------ */
-/* Loader                                                             */
+/* Loader (platform-specific)                                        */
 /* ------------------------------------------------------------------ */
 int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
+#ifdef _WIN32
+  /* Windows: use LoadLibrary */
+  HMODULE handle = LoadLibraryA("libcrypto-3-x64.dll");
+  if (!handle) handle = LoadLibraryA("libcrypto-3.dll");
+  if (!handle) handle = LoadLibraryA("libcrypto.dll");
+  if (!handle) return 1;
+
+  unsigned long (*OPENSSL_version_num_func)(void) =
+    (unsigned long (*)(void))GetProcAddress(handle, "OpenSSL_version_num");
+  if (!OPENSSL_version_num_func) return 2;
+
+  unsigned long version = (*OPENSSL_version_num_func)();
+  *major = version >> 28;
+  *minor = (version >> 20) & 0xff;
+  *fix = (version >> 12) & 0xff;
+
+  if (*major < 1 || (*major == 1 && (*minor < 1 || (*minor == 1 && *fix < 1)))) {
+    return 3;
+  }
+
+#define IMPORT_FUNC(ret, func, params) \
+  func = (ret (*) params)GetProcAddress(handle, "" #func ""); \
+  if (!func) return 4;
+  IMPORTED_OPEN_SSL_FUNCTIONS
+#undef IMPORT_FUNC
+
+#else
+  /* POSIX: use dlopen */
   void *handle = 0;
 
 #ifdef __MACH__
@@ -396,6 +257,8 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
   if (!func) return 4;
   IMPORTED_OPEN_SSL_FUNCTIONS
 #undef IMPORT_FUNC
+
+#endif
 
   /* Initialize OpenSSL library (required for OpenSSL 3.x provider-based operations) */
   OPENSSL_init_crypto(0, NULL);
@@ -937,4 +800,3 @@ int moonbitlang_ssh_bn_mod_exp(void *r, void *a, void *p, void *m) {
   return BN_mod_exp((BIGNUM *)r, (BIGNUM *)a, (BIGNUM *)p, (BIGNUM *)m, 0);
 }
 
-#endif

@@ -5,6 +5,7 @@ import {
 
 options(
   "native-stub": [ "openssl.c" ],
+  "native-link-flags": [ "-lkernel32" ],
   targets: {
     "crypto_util.mbt": [ "native" ],
     "digest.mbt": [ "native" ],

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export MOONBIT_CLI_ARGS=\"cnb-pmg-1jqm552t7-001.533d31c2-5e5d-45c4-94da-bf96e01423b3-q7g@cnb.space --exec 'uname -a'\")",
+      "Bash(gcc -c openssl.c -o test.o)",
+      "Bash(gcc --version)",
+      "Bash(MOON_LOG=link moon build --target native)",
+      "Bash(moon build *)",
+      "Read(//tmp/**)",
+      "Bash(ar t *)",
+      "Bash(nm _build/native/debug/build/src/crypto/openssl.obj)",
+      "Bash(C:/msys64/ucrt64/bin/cc.exe -o test.exe cmd/main/main.c runtime.obj src/crypto/libcrypto.lib src/socket/libsocket.lib -lm -lkernel32)",
+      "Bash(C:/msys64/ucrt64/bin/cc.exe -o _build/native/debug/build/cmd/main/main.exe -IC:\\\\Users\\\\C2\\\\.moon\\\\include -g -fwrapv -fno-strict-aliasing -Og _build/native/debug/build/cmd/main/main.c _build/native/debug/build/runtime.obj _build/native/debug/build/src/crypto/libcrypto.lib _build/native/debug/build/src/socket/libsocket.lib -lm -lkernel32)",
+      "Bash(objdump -t _build/native/debug/build/src/crypto/openssl.obj)",
+      "Bash(timeout 10 bash -c 'export MOONBIT_CLI_ARGS=\"cnb-pmg-1jqm552t7-001.533d31c2-5e5d-45c4-94da-bf96e01423b3-q7g@cnb.space --exec \\\\\"uname -a\\\\\"\"; ./_build/native/debug/build/cmd/main/main.exe')",
+      "Bash(./_build/native/debug/build/cmd/main/main.exe --help)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(export MOONBIT_CLI_ARGS=\"test@localhost --exec 'echo hello'\")",
+      "Bash(echo \"Timeout or error: $?\")"
+    ]
+  }
+}
