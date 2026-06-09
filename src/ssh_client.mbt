@@ -111,13 +111,14 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
   conn.write("\{client_banner}\r\n") catch {
     e => raise IoError("write banner: \{e}")
   }
-  // Read server banner
-  let banner_line = read_line(conn) catch {
+  // Read server banner as raw bytes — avoids any String/Bytes type ambiguity.
+  let banner_bytes = conn.read_until_newline() catch {
     e => raise IoError("read banner: \{e}")
   }
-  if !(banner_line.has_prefix("SSH-")) {
-    raise ProtocolError("server banner missing SSH- prefix: \{banner_line}")
+  if !banner_bytes.has_prefix(b"SSH-") {
+    raise ProtocolError("server banner missing SSH- prefix: \{banner_bytes}")
   }
+  let banner_line = banner_bytes.to_string()
   let v_c = @utf8.encode(client_banner)
   let v_s = @utf8.encode(banner_line)
   let kex = KexContext::new(v_c, v_s)
@@ -313,12 +314,6 @@ fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
 }
 
 ///|
-fn read_line(conn : @socket.Tcp) -> String raise SshError {
-  let line = conn.read_line() catch { e => raise IoError("read_line: \{e}") }
-  strip_line_ending(line)
-}
-
-///|
 fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) =>
@@ -348,21 +343,6 @@ fn Client::write_plain_packet(
         e => raise IoError("write packet: \{e}")
       }
   }
-}
-
-///|
-fn strip_line_ending(line : String) -> String {
-  let arr = line.to_array()
-  let mut end = arr.length()
-  while end > 0 &&
-        (arr.unsafe_get(end - 1) == '\n' || arr.unsafe_get(end - 1) == '\r') {
-    end = end - 1
-  }
-  let sb = StringBuilder::new()
-  for i in 0..<end {
-    sb.write_char(arr.unsafe_get(i))
-  }
-  sb.to_string()
 }
 
 // --- Encryption support ---------------------------------------------

@@ -151,6 +151,43 @@ pub fn Tcp::read_exact(self : Tcp, size : Int) -> Bytes raise {
 }
 
 ///|
+/// Read bytes until a newline (\n) is encountered.
+/// Returns all content bytes up to (but not including) the newline.
+/// Trailing \r is stripped (for \r\n line endings).
+pub fn Tcp::read_until_newline(self : Tcp) -> Bytes raise {
+  let buffer = Bytes::new(4096)
+  let mut total_read = 0
+  let mut found_newline = false
+
+  while !found_newline && total_read < 4096 {
+    let bytes_read = socket_recv(self.handle, buffer, total_read, 1)
+    if bytes_read <= 0 {
+      if total_read == 0 {
+        raise IoError("Connection closed or error reading")
+      }
+      break
+    }
+    let byte = buffer[total_read]
+    if byte == b'\n' {
+      found_newline = true
+    } else {
+      total_read = total_read + 1
+    }
+  }
+
+  if total_read == 0 {
+    raise IoError("No data read")
+  }
+
+  // Strip trailing \r (for \r\n line endings)
+  if total_read > 0 && buffer[total_read - 1] == b'\r' {
+    total_read = total_read - 1
+  }
+
+  Bytes::makei(total_read, i => buffer[i])
+}
+
+///|
 /// Close the connection
 pub fn Tcp::close(self : Tcp) -> Unit {
   socket_close(self.handle)
