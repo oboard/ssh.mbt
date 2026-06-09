@@ -704,16 +704,20 @@ fn verify_host_key_signature(
 
   // Determine the digest algorithm for the signature
   let md_alg = match sig_blob.alg {
-    "ssh-ed25519" => 0  // Ed25519 uses its own digest
-    "rsa-sha2-256" => 4  // SHA-256
-    "rsa-sha2-512" => 5  // SHA-512
-    "ssh-rsa" => 2       // SHA-1 (legacy)
-    "ecdsa-sha2-nistp256" => 4  // SHA-256
-    _ => raise ProtocolError("kex: unsupported signature algorithm \{sig_blob.alg}")
+    "ssh-ed25519" => 0 // Ed25519 uses its own digest
+    "rsa-sha2-256" => 4 // SHA-256
+    "rsa-sha2-512" => 5 // SHA-512
+    "ssh-rsa" => 2 // SHA-1 (legacy)
+    "ecdsa-sha2-nistp256" => 4 // SHA-256
+    _ =>
+      raise ProtocolError(
+        "kex: unsupported signature algorithm \{sig_blob.alg}",
+      )
   }
 
   let valid = pkey.verify(md_alg, exchange_hash, sig_blob.sig) catch {
-    e => raise ProtocolError("kex: signature verification failed: \{e.message()}")
+    e =>
+      raise ProtocolError("kex: signature verification failed: \{e.message()}")
   }
 
   if !valid {
@@ -735,7 +739,9 @@ fn parse_host_key_to_pkey(
   let r = Reader::new(blob)
   let key_type = r.read_string_as_str()
   if key_type != alg {
-    raise ProtocolError("kex: host key type mismatch: expected \{alg}, got \{key_type}")
+    raise ProtocolError(
+      "kex: host key type mismatch: expected \{alg}, got \{key_type}",
+    )
   }
 
   match alg {
@@ -767,7 +773,8 @@ fn parse_host_key_to_pkey(
       }
       // OpenSSL expects the full point encoding
       @crypto.PKey::from_raw(@crypto.KeyType::ec_p256(), q) catch {
-        e => raise ProtocolError("kex: failed to load ECDSA key: \{e.message()}")
+        e =>
+          raise ProtocolError("kex: failed to load ECDSA key: \{e.message()}")
       }
     }
     _ => raise ProtocolError("kex: unsupported host key algorithm \{alg}")
@@ -811,13 +818,13 @@ fn key_material_sizes(enc_alg : String, mac_alg : String) -> (Int, Int, Int) {
   }
 
   let mac_key_len = if is_aead_cipher(enc_alg) {
-    0  // AEAD ciphers don't need separate MAC
+    0 // AEAD ciphers don't need separate MAC
   } else {
     match mac_alg {
       "hmac-sha1" => 20
       "hmac-sha2-256" => 32
       "hmac-sha2-512" => 64
-      _ => 32  // default
+      _ => 32 // default
     }
   }
 
@@ -826,7 +833,8 @@ fn key_material_sizes(enc_alg : String, mac_alg : String) -> (Int, Int, Int) {
 
 ///|
 fn is_aead_cipher(alg : String) -> Bool {
-  alg == "aes128-gcm@openssh.com" || alg == "aes256-gcm@openssh.com" ||
+  alg == "aes128-gcm@openssh.com" ||
+  alg == "aes256-gcm@openssh.com" ||
   alg == "chacha20-poly1305@openssh.com"
 }
 
@@ -834,13 +842,18 @@ fn is_aead_cipher(alg : String) -> Bool {
 
 ///|
 /// Derive session encryption keys after KEX is complete.
-pub fn KexContext::derive_session_keys(self : KexContext) -> DerivedKeys raise SshError {
+pub fn KexContext::derive_session_keys(
+  self : KexContext,
+) -> DerivedKeys raise SshError {
   if self.state != Done {
     raise ProtocolError("kex: cannot derive keys, KEX is not complete")
   }
 
   let hash_alg = hash_algorithm_for_kex(self.kex_alg)
-  let (enc_key_len, iv_len, mac_key_len) = key_material_sizes(self.enc_alg, self.mac_alg)
+  let (enc_key_len, iv_len, mac_key_len) = key_material_sizes(
+    self.enc_alg,
+    self.mac_alg,
+  )
   let (iv_c2s, iv_s2c, ek_c2s, ek_s2c, mk_c2s, mk_s2c) = derive_keys(
     hash_alg,
     self.exchange_hash,

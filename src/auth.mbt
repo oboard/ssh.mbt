@@ -124,11 +124,31 @@ pub enum AuthReply {
 } derive(Show, Eq)
 
 // Factory functions for cross-package construction
-pub fn AuthReply::success() -> AuthReply { Success }
-pub fn AuthReply::failure(methods : Array[String], partial : Bool) -> AuthReply { Failure(methods, partial) }
-pub fn AuthReply::public_key_ok(alg : String, blob : Bytes) -> AuthReply { PublicKeyOk(alg, blob) }
-pub fn AuthReply::password_change_required() -> AuthReply { PasswordChangeRequired }
-pub fn AuthReply::service_accept() -> AuthReply { ServiceAccept }
+
+///|
+pub fn AuthReply::success() -> AuthReply {
+  Success
+}
+
+///|
+pub fn AuthReply::failure(methods : Array[String], partial : Bool) -> AuthReply {
+  Failure(methods, partial)
+}
+
+///|
+pub fn AuthReply::public_key_ok(alg : String, blob : Bytes) -> AuthReply {
+  PublicKeyOk(alg, blob)
+}
+
+///|
+pub fn AuthReply::password_change_required() -> AuthReply {
+  PasswordChangeRequired
+}
+
+///|
+pub fn AuthReply::service_accept() -> AuthReply {
+  ServiceAccept
+}
 
 // --- High-level auth flow --------------------------------------------
 
@@ -156,11 +176,31 @@ pub enum AuthState {
 } derive(Eq, Show)
 
 // Factory functions for cross-package construction
-pub fn AuthState::idle() -> AuthState { Idle }
-pub fn AuthState::awaiting_reply() -> AuthState { AwaitingReply }
-pub fn AuthState::awaiting_signature(alg : String, blob : Bytes) -> AuthState { AwaitingSignature(alg, blob) }
-pub fn AuthState::authenticated() -> AuthState { Authenticated }
-pub fn AuthState::rejected(methods : Array[String]) -> AuthState { Rejected(methods) }
+
+///|
+pub fn AuthState::idle() -> AuthState {
+  Idle
+}
+
+///|
+pub fn AuthState::awaiting_reply() -> AuthState {
+  AwaitingReply
+}
+
+///|
+pub fn AuthState::awaiting_signature(alg : String, blob : Bytes) -> AuthState {
+  AwaitingSignature(alg, blob)
+}
+
+///|
+pub fn AuthState::authenticated() -> AuthState {
+  Authenticated
+}
+
+///|
+pub fn AuthState::rejected(methods : Array[String]) -> AuthState {
+  Rejected(methods)
+}
 
 ///|
 pub fn AuthContext::new(user : String) -> AuthContext {

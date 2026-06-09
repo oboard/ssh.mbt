@@ -95,13 +95,41 @@ pub enum ChannelState {
 } derive(Eq, Show)
 
 // Factory functions for cross-package construction
-pub fn ChannelState::closed() -> ChannelState { Closed }
-pub fn ChannelState::opening() -> ChannelState { Opening }
-pub fn ChannelState::open_state() -> ChannelState { Open }
-pub fn ChannelState::exec_pending() -> ChannelState { ExecPending }
-pub fn ChannelState::eof_received() -> ChannelState { EofReceived }
-pub fn ChannelState::closing() -> ChannelState { Closing }
-pub fn ChannelState::done() -> ChannelState { Done }
+
+///|
+pub fn ChannelState::closed() -> ChannelState {
+  Closed
+}
+
+///|
+pub fn ChannelState::opening() -> ChannelState {
+  Opening
+}
+
+///|
+pub fn ChannelState::open_state() -> ChannelState {
+  Open
+}
+
+///|
+pub fn ChannelState::exec_pending() -> ChannelState {
+  ExecPending
+}
+
+///|
+pub fn ChannelState::eof_received() -> ChannelState {
+  EofReceived
+}
+
+///|
+pub fn ChannelState::closing() -> ChannelState {
+  Closing
+}
+
+///|
+pub fn ChannelState::done() -> ChannelState {
+  Done
+}
 
 ///|
 pub fn Channel::new(local_id : Int, session_id : Bytes) -> Channel {

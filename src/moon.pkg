@@ -15,5 +15,6 @@ options(
     "sftp.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],
     "digest_wbtest.mbt": [ "native" ],
+    "cipher_wbtest.mbt": [ "native" ],
   },
 )

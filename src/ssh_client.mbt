@@ -192,9 +192,7 @@ pub fn Client::auth_password(
   let reply2 = self.read_encrypted_packet()
   let auth_reply = parse_auth_reply(reply2)
   match auth_reply {
-    Success => {
-      self.auth.apply_reply(auth_reply)
-    }
+    Success => self.auth.apply_reply(auth_reply)
     Failure(methods, _) => raise AuthFailed("methods: \{methods}")
     _ => raise ProtocolError("auth: unexpected reply")
   }
@@ -230,11 +228,7 @@ pub fn Client::exec(
   command : String,
 ) -> String raise SshError {
   // 1. Open channel
-  let open_msg = build_channel_open(
-    channel.id(),
-    1024 * 1024,
-    32 * 1024,
-  )
+  let open_msg = build_channel_open(channel.id(), 1024 * 1024, 32 * 1024)
   self.write_packet(open_msg)
 
   // Wait for CHANNEL_OPEN_CONFIRMATION
@@ -375,7 +369,10 @@ fn strip_line_ending(line : String) -> String {
 
 ///|
 /// Install encryption after successful KEX.
-fn Client::install_encryption(self : Client, keys : DerivedKeys) -> Unit raise SshError {
+fn Client::install_encryption(
+  self : Client,
+  keys : DerivedKeys,
+) -> Unit raise SshError {
   let enc_alg = parse_cipher_algorithm(self.kex.enc_alg)
   let mac_alg = parse_mac_algorithm(self.kex.mac_alg)
 
@@ -417,14 +414,17 @@ fn Client::install_encryption(self : Client, keys : DerivedKeys) -> Unit raise S
 }
 
 ///|
-fn parse_cipher_algorithm(name : String) -> @crypto.CipherAlgorithm raise SshError {
+fn parse_cipher_algorithm(
+  name : String,
+) -> @crypto.CipherAlgorithm raise SshError {
   match name {
     "aes128-ctr" => @crypto.CipherAlgorithm::aes128_ctr()
     "aes192-ctr" => @crypto.CipherAlgorithm::aes192_ctr()
     "aes256-ctr" => @crypto.CipherAlgorithm::aes256_ctr()
     "aes128-gcm@openssh.com" => @crypto.CipherAlgorithm::aes128_gcm()
     "aes256-gcm@openssh.com" => @crypto.CipherAlgorithm::aes256_gcm()
-    "chacha20-poly1305@openssh.com" => @crypto.CipherAlgorithm::chacha20_poly1305()
+    "chacha20-poly1305@openssh.com" =>
+      @crypto.CipherAlgorithm::chacha20_poly1305()
     _ => raise ProtocolError("unsupported cipher algorithm: \{name}")
   }
 }
@@ -466,7 +466,9 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
 
       read_packet(
         size => {
-          conn.read_exact(size) catch { e => raise IoError("read packet: \{e}") }
+          conn.read_exact(size) catch {
+            e => raise IoError("read packet: \{e}")
+          }
         },
         enc_alg.block_len(),
         mac_size,
@@ -487,7 +489,11 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
 
 ///|
 /// Verify MAC for encrypt-then-MAC mode.
-fn verify_mac_etm(client : Client, data : Bytes, expected_tag : Bytes) -> Unit raise SshError {
+fn verify_mac_etm(
+  client : Client,
+  data : Bytes,
+  expected_tag : Bytes,
+) -> Unit raise SshError {
   let mac_ctx = match client.mac_s2c {
     Some(m) => m
     None => return
@@ -511,7 +517,10 @@ fn verify_mac_etm(client : Client, data : Bytes, expected_tag : Bytes) -> Unit r
 
 ///|
 /// Write an encrypted packet to the connection.
-fn Client::write_encrypted_packet(self : Client, payload : Bytes) -> Unit raise SshError {
+fn Client::write_encrypted_packet(
+  self : Client,
+  payload : Bytes,
+) -> Unit raise SshError {
   match self.conn {
     Connected(conn) => {
       let cipher = match self.cipher_c2s {
@@ -527,18 +536,13 @@ fn Client::write_encrypted_packet(self : Client, payload : Bytes) -> Unit raise 
       let mac_enabled = !enc_alg.is_aead()
       let block_size = enc_alg.block_len()
 
-      let packet = write_packet(
-        payload,
-        block_size,
-        mac_enabled,
-        data => {
-          if mac_enabled {
-            compute_mac_etm(self, data)
-          } else {
-            b""
-          }
-        },
-      )
+      let packet = write_packet(payload, block_size, mac_enabled, data => {
+        if mac_enabled {
+          compute_mac_etm(self, data)
+        } else {
+          b""
+        }
+      })
 
       // Encrypt the body (excluding MAC)
       let mac_size = if mac_enabled {

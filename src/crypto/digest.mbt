@@ -23,10 +23,12 @@ pub fn Algorithm::sha256() -> Algorithm {
   Sha256
 }
 
+///|
 pub fn Algorithm::sha384() -> Algorithm {
   Sha384
 }
 
+///|
 pub fn Algorithm::sha512() -> Algorithm {
   Sha512
 }

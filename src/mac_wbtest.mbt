@@ -1,5 +1,5 @@
-///| MAC (HMAC) 单元测试：RFC 4231 测试向量。
-
+///|
+/// MAC (HMAC) 单元测试：RFC 4231 测试向量。
 test "HMAC-SHA256 RFC 4231 Test Case 2" {
   // Key = "Jefe"
   // Data = "what do ya want for nothing?"
@@ -12,12 +12,14 @@ test "HMAC-SHA256 RFC 4231 Test Case 2" {
   assert_eq(tag.unsafe_get(1).to_int(), 0xdc)
 }
 
+///|
 test "HMAC-SHA256 empty data" {
   let key = Bytes::make(32, b'\x0b')
   let tag = @crypto.hmac(@crypto.MacAlgorithm::hmac_sha256(), key, b"")
   assert_eq(tag.length(), 32)
 }
 
+///|
 test "HMAC-SHA512 RFC 4231 Test Case 1" {
   let key = Bytes::make(20, b'\x0b')
   let data = @utf8.encode("Hi There")
@@ -28,6 +30,7 @@ test "HMAC-SHA512 RFC 4231 Test Case 1" {
   assert_eq(tag.unsafe_get(1).to_int(), 0xaa)
 }
 
+///|
 test "HMAC-SHA1 basic" {
   let key = @utf8.encode("key")
   let data = @utf8.encode("data")
@@ -35,6 +38,7 @@ test "HMAC-SHA1 basic" {
   assert_eq(tag.length(), 20)
 }
 
+///|
 test "Mac incremental matches oneshot" {
   let key = Bytes::make(16, b'\xAA')
   let data1 = @utf8.encode("Test ")
@@ -54,6 +58,7 @@ test "Mac incremental matches oneshot" {
   assert_eq(oneshot_tag, inc_tag)
 }
 
+///|
 test "MacAlgorithm::output_len consistency" {
   assert_eq(@crypto.MacAlgorithm::hmac_sha1().output_len(), 20)
   assert_eq(@crypto.MacAlgorithm::hmac_sha256().output_len(), 32)
@@ -61,6 +66,7 @@ test "MacAlgorithm::output_len consistency" {
   assert_eq(@crypto.MacAlgorithm::hmac_sha512().output_len(), 64)
 }
 
+///|
 test "truncate MAC to shorter length" {
   let full = Bytes::make(32, b'\xFF')
   let short = @crypto.truncate(full, 16)

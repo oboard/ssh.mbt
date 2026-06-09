@@ -233,9 +233,19 @@ typedef struct evp_pkey_st    EVP_PKEY;
 typedef struct bignum_st      BIGNUM;
 typedef struct engine_st      ENGINE;
 typedef struct bn_ctx_st      BN_CTX;
-/* NOTE: In OpenSSL 3.x, OSSL_PARAM is opaque. We never declare variables
- * of this type directly; we always use OSSL_PARAM_BLD to build param arrays. */
-typedef struct ossl_param_st  OSSL_PARAM;
+
+/* OSSL_PARAM structure definition (needed for AEAD get_tag/set_tag via
+ * EVP_CIPHER_CTX_{get,set}_params).  In OpenSSL 3.x this is normally opaque,
+ * but we must define it here since we build params directly for the dlsym
+ * compatibility workaround (EVP_CIPHER_CTX_ctrl GCM_GET_TAG does not work
+ * when all symbols are loaded via dlsym). */
+typedef struct ossl_param_st {
+  const char   *key;         /* parameter name */
+  unsigned int  data_type;    /* OSSL_PARAM_* constant */
+  void        *data;         /* pointer to value */
+  size_t       data_size;     /* length of value buffer */
+  size_t       return_size;   /* returned length */
+} OSSL_PARAM;
 
 /* Numeric PKEY type IDs */
 #define SSH_PKEY_X25519  (1 << 16 | 7)
@@ -249,6 +259,7 @@ typedef struct ossl_param_st  OSSL_PARAM;
 /* ------------------------------------------------------------------ */
 #define IMPORTED_OPEN_SSL_FUNCTIONS \
   /* version / errors / random */ \
+  IMPORT_FUNC(int, OPENSSL_init_crypto, (uint64_t opts, const void *settings)) \
   IMPORT_FUNC(unsigned long, OpenSSL_version_num, (void)) \
   IMPORT_FUNC(int, RAND_bytes, (unsigned char *buf, int num)) \
   IMPORT_FUNC(unsigned long, ERR_get_error, (void)) \
@@ -292,6 +303,9 @@ typedef struct ossl_param_st  OSSL_PARAM;
   IMPORT_FUNC(int, EVP_DecryptFinal_ex, (EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)) \
   IMPORT_FUNC(int, EVP_CIPHER_CTX_ctrl, (EVP_CIPHER_CTX *ctx, int type, int arg, void *ptr)) \
   IMPORT_FUNC(int, EVP_CIPHER_CTX_set_key_length, (EVP_CIPHER_CTX *ctx, int keylen)) \
+  IMPORT_FUNC(const EVP_CIPHER *, EVP_CIPHER_CTX_cipher, (const EVP_CIPHER_CTX *ctx)) \
+  IMPORT_FUNC(int, EVP_CIPHER_CTX_get_params, (EVP_CIPHER_CTX *ctx, const void *params)) \
+  IMPORT_FUNC(int, EVP_CIPHER_CTX_set_params, (EVP_CIPHER_CTX *ctx, const void *params)) \
   /* pkey */ \
   IMPORT_FUNC(EVP_PKEY_CTX *, EVP_PKEY_CTX_new_id, (int id, ENGINE *e)) \
   IMPORT_FUNC(EVP_PKEY_CTX *, EVP_PKEY_CTX_new, (EVP_PKEY *pkey, ENGINE *e)) \
@@ -358,9 +372,9 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
   if (!handle) handle = dlopen("/usr/lib/libcrypto.46.dylib", RTLD_LAZY);
   if (!handle) handle = dlopen("/usr/lib/libcrypto.dylib", RTLD_LAZY);
 #else
-  handle = dlopen("libcrypto.so.3", RTLD_LAZY);
-  if (!handle) handle = dlopen("libcrypto.so.1.1", RTLD_LAZY);
-  if (!handle) handle = dlopen("libcrypto.so", RTLD_LAZY);
+  handle = dlopen("libcrypto.so.3", RTLD_NOW);
+  if (!handle) handle = dlopen("libcrypto.so.1.1", RTLD_NOW);
+  if (!handle) handle = dlopen("libcrypto.so", RTLD_NOW);
 #endif
   if (!handle) return 1;
 
@@ -381,6 +395,9 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
   if (!func) return 4;
   IMPORTED_OPEN_SSL_FUNCTIONS
 #undef IMPORT_FUNC
+
+  /* Initialize OpenSSL library (required for OpenSSL 3.x provider-based operations) */
+  OPENSSL_init_crypto(0, NULL);
 
   return 0;
 }
@@ -574,11 +591,29 @@ int moonbitlang_ssh_cipher_set_iv_len(void *ctx, int iv_len) {
 }
 
 int moonbitlang_ssh_cipher_set_tag(void *ctx, const unsigned char *tag, int tag_len) {
-  return EVP_CIPHER_CTX_ctrl((EVP_CIPHER_CTX *)ctx, EVP_CTRL_GCM_SET_TAG, tag_len, (void *)tag);
+  /* Use OSSL_PARAM-based API (works with dlsym on OpenSSL 3.x). */
+  OSSL_PARAM params[2];
+  params[0].key = "tag";
+  params[0].data_type = 5; /* OSSL_PARAM_OCTET_STRING */
+  params[0].data = (void *)tag;
+  params[0].data_size = (size_t)tag_len;
+  params[0].return_size = 0;
+  params[1].key = NULL;
+  return EVP_CIPHER_CTX_set_params((EVP_CIPHER_CTX *)ctx, params);
 }
 
 int moonbitlang_ssh_cipher_get_tag(void *ctx, unsigned char *tag, int tag_len) {
-  return EVP_CIPHER_CTX_ctrl((EVP_CIPHER_CTX *)ctx, EVP_CTRL_GCM_GET_TAG, tag_len, (void *)tag);
+  /* Use OSSL_PARAM-based API (works with dlsym on OpenSSL 3.x).
+   * EVP_CIPHER_CTX_ctrl(GCM_GET_TAG) fails when all functions are loaded
+   * via dlsym - use EVP_CIPHER_CTX_get_params instead. */
+  OSSL_PARAM params[2];
+  params[0].key = "tag";
+  params[0].data_type = 5; /* OSSL_PARAM_OCTET_STRING */
+  params[0].data = tag;
+  params[0].data_size = (size_t)tag_len;
+  params[0].return_size = 0;
+  params[1].key = NULL;
+  return EVP_CIPHER_CTX_get_params((EVP_CIPHER_CTX *)ctx, params);
 }
 
 int moonbitlang_ssh_cipher_update(void *ctx, int encrypt,

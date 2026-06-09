@@ -1,5 +1,5 @@
-///| Digest 单元测试：SHA-256/512 已知向量（FIPS 180-4 / RFC 4634）。
-
+///|
+/// Digest 单元测试：SHA-256/512 已知向量（FIPS 180-4 / RFC 4634）。
 test "SHA-256 empty input" {
   let h = @crypto.Hasher::new(@crypto.Algorithm::sha256())
   let digest = h.finalize()
@@ -7,6 +7,7 @@ test "SHA-256 empty input" {
   assert_eq(digest.length(), 32)
 }
 
+///|
 test "SHA-256 abc" {
   let h = @crypto.Hasher::new(@crypto.Algorithm::sha256())
   h.update_string("abc")
@@ -17,6 +18,7 @@ test "SHA-256 abc" {
   assert_eq(digest.unsafe_get(1).to_int(), 0x78)
 }
 
+///|
 test "SHA-256 oneshot matches incremental" {
   let data = @utf8.encode("The quick brown fox jumps over the lazy dog")
   let one = @crypto.digest(@crypto.Algorithm::sha256(), data)
@@ -28,6 +30,7 @@ test "SHA-256 oneshot matches incremental" {
   assert_eq(one.length(), 32)
 }
 
+///|
 test "SHA-512 empty input" {
   let h = @crypto.Hasher::new(@crypto.Algorithm::sha512())
   let digest = h.finalize()
@@ -35,6 +38,7 @@ test "SHA-512 empty input" {
   assert_eq(digest.length(), 64)
 }
 
+///|
 test "SHA-512 abc" {
   let h = @crypto.Hasher::new(@crypto.Algorithm::sha512())
   h.update_string("abc")
@@ -44,6 +48,7 @@ test "SHA-512 abc" {
   assert_eq(digest.unsafe_get(0).to_int(), 0xdd)
 }
 
+///|
 test "SHA-1 output length" {
   let h = @crypto.Hasher::new(@crypto.Algorithm::sha1())
   let digest = h.finalize()
@@ -52,6 +57,7 @@ test "SHA-1 output length" {
   assert_eq(digest.unsafe_get(0).to_int(), 0xda)
 }
 
+///|
 test "Algorithm::output_len consistency" {
   assert_eq(@crypto.Algorithm::sha1().output_len(), 20)
   assert_eq(@crypto.Algorithm::sha256().output_len(), 32)
@@ -59,6 +65,7 @@ test "Algorithm::output_len consistency" {
   assert_eq(@crypto.Algorithm::sha512().output_len(), 64)
 }
 
+///|
 test "Algorithm::block_len consistency" {
   assert_eq(@crypto.Algorithm::sha1().block_len(), 64)
   assert_eq(@crypto.Algorithm::sha256().block_len(), 64)

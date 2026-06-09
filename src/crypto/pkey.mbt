@@ -18,10 +18,26 @@ pub enum KeyType {
 } derive(Eq, Show)
 
 // Factory functions for cross-package construction (enum constructors are package-private)
-pub fn KeyType::x25519() -> KeyType { X25519 }
-pub fn KeyType::ed25519() -> KeyType { Ed25519 }
-pub fn KeyType::rsa() -> KeyType { Rsa }
-pub fn KeyType::ec_p256() -> KeyType { EcP256 }
+
+///|
+pub fn KeyType::x25519() -> KeyType {
+  X25519
+}
+
+///|
+pub fn KeyType::ed25519() -> KeyType {
+  Ed25519
+}
+
+///|
+pub fn KeyType::rsa() -> KeyType {
+  Rsa
+}
+
+///|
+pub fn KeyType::ec_p256() -> KeyType {
+  EcP256
+}
 
 ///|
 pub fn KeyType::id(self : KeyType) -> Int {
