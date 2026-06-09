@@ -49,12 +49,12 @@ pub fn build_service_request(service : String) -> Bytes {
 ///   byte     SSH_MSG_USERAUTH_REQUEST (50)
 ///   string   user name
 ///   string   service name ("ssh-connection")
-///   string   method name ("password" | "publickey" | "none")
+///   string   auth_method name ("password" | "publickey" | "none")
 ///   ... method-specific fields
 pub fn build_userauth_request(
   user : String,
   service : String,
-  method : String,
+  auth_method  : String,
   has_signature? : Bool,
   pubkey_alg? : String,
   pubkey_blob? : Bytes,
@@ -65,16 +65,16 @@ pub fn build_userauth_request(
   w.write_byte(50)
   w.write_string_from_str(user)
   w.write_string_from_str(service)
-  w.write_string_from_str(method)
-  if method == "password" {
+  w.write_string_from_str(auth_method)
+  if auth_method == "password" {
     w.write_byte(0) // FALSE for password change
-    w.write_string_from_str(password.or(""))
-  } else if method == "publickey" {
+    w.write_string_from_str(password.unwrap_or(""))
+  } else if auth_method == "publickey" {
     w.write_byte(if has_signature.or(false) { 1 } else { 0 })
-    w.write_string_from_str(pubkey_alg.or(""))
-    w.write_string(pubkey_blob.or(b""))
+    w.write_string_from_str(pubkey_alg.unwrap_or(""))
+    w.write_string(pubkey_blob.unwrap_or(b""))
     if has_signature.or(false) {
-      w.write_string(signature.or(b""))
+      w.write_string(signature.unwrap_or(b""))
     }
   }
   // "none" has no method-specific fields
