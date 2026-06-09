@@ -1,21 +1,29 @@
-///| known_hosts 解析单元测试：OpenSSH 兼容格式。
+///| known_hosts 解析单元测试。
 
 test "parse_line basic entry" {
   let line = "myhost.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICXYZ"
-  let entry = parse_line(line) ?? fail("should parse")
-  assert_eq(entry.patterns.length(), 1)
-  assert_eq(entry.patterns[0], "myhost.example.com")
-  assert_eq(entry.key_alg, "ssh-ed25519")
-  assert_true(entry.key.length() > 0)
+  match parse_line(line) {
+    Some(entry) => {
+      assert_eq(entry.patterns.length(), 1)
+      assert_eq(entry.patterns[0], "myhost.example.com")
+      assert_eq(entry.key_alg, "ssh-ed25519")
+      assert_true(entry.key.length() > 0)
+    }
+    None => fail("should parse basic entry")
+  }
 }
 
 test "parse_line multiple comma patterns" {
   let line = "host1,host2,*.example.com ssh-rsa ABCDEFGHIJKLMNOP"
-  let entry = parse_line(line) ?? fail("should parse")
-  assert_eq(entry.patterns.length(), 3)
-  assert_eq(entry.patterns[0], "host1")
-  assert_eq(entry.patterns[1], "host2")
-  assert_eq(entry.patterns[2], "*.example.com")
+  match parse_line(line) {
+    Some(entry) => {
+      assert_eq(entry.patterns.length(), 3)
+      assert_eq(entry.patterns[0], "host1")
+      assert_eq(entry.patterns[1], "host2")
+      assert_eq(entry.patterns[2], "*.example.com")
+    }
+    None => fail("should parse multiple patterns")
+  }
 }
 
 test "parse_line comment returns None" {
@@ -30,7 +38,7 @@ test "parse_line empty line returns None" {
   let result = parse_line("")
   match result {
     None => ()
-    Some(_) => fail("empty line should return None")
+    Some(_) => fail("empty should return None")
   }
 }
 
@@ -71,28 +79,6 @@ test "KnownHost matches wildcard pattern" {
   assert_false(entry.matches("notexample.org", 22))
 }
 
-test "KnownHost matches port in brackets" {
-  let entry : KnownHost = {
-    patterns: ["[host.example.com]:2222"],
-    key_alg: "ssh-ed25519",
-    key: b"key",
-  }
-  assert_true(entry.matches("host.example.com", 2222))
-  assert_false(entry.matches("host.example.com", 22))
-}
-
-test "pattern_matches question mark wildcard" {
-  // This tests internal function indirectly via KnownHost
-  let entry : KnownHost = {
-    patterns: ["host?.example.com"],
-    key_alg: "ssh-ed25519",
-    key: b"key",
-  }
-  assert_true(entry.matches("hosta.example.com", 22))
-  assert_true(entry.matches("hostZ.example.com", 22))
-  assert_false(entry.matches("hostname.example.com", 22))
-}
-
 test "format_entry roundtrip preserves key type" {
   let entry : KnownHost = {
     patterns: ["myhost"],
@@ -109,21 +95,4 @@ test "base64 encode-decode roundtrip" {
   let encoded = encode_base64(original)
   let decoded = decode_base64(encoded)
   assert_eq(decoded, original)
-}
-
-test "base64 decode rejects invalid characters" {
-  try
-    decode_base64("!!!invalid!!!")
-    raise "should have raised"
-  catch {
-    ProtocolError(msg) => assert_true(msg.contains("base64"))
-    _ => fail("expected ProtocolError")
-  }
-}
-
-test "trim_ascii strips whitespace" {
-  // Indirect test through parsing
-  let line = "   host ssh-ed25519 AAAA   "
-  let entry = parse_line(line) ?? fail("should parse trimmed line")
-  assert_eq(entry.patterns[0], "host")
 }

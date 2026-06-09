@@ -623,10 +623,10 @@ fn KexContext::drive_curve25519(
   accept_host_key : (String, Bytes) -> Bool,
 ) -> Unit raise SshError {
   let (ephemeral, _private_key) = @crypto.x25519_generate() catch {
-    e => raise ProtocolError("kex: \{e.message()}")
+    e => raise ProtocolError("kex: \{e}")
   }
   let client_public = ephemeral.raw_public() catch {
-    e => raise ProtocolError("kex: \{e.message()}")
+    e => raise ProtocolError("kex: \{e}")
   }
   self.ephemeral = Some(ephemeral)
   write_packet(build_ecdh_init_payload(client_public))
@@ -643,7 +643,7 @@ fn KexContext::drive_curve25519(
   }
   self.peer_host_key = reply.host_key
   let shared = @crypto.x25519_derive(ephemeral, reply.server_public) catch {
-    e => raise ProtocolError("kex: \{e.message()}")
+    e => raise ProtocolError("kex: \{e}")
   }
   self.shared_secret = shared
   self.exchange_hash = compute_ecdh_exchange_hash(
@@ -657,7 +657,7 @@ fn KexContext::drive_curve25519(
     reply.server_public,
     shared,
   ) catch {
-    e => raise ProtocolError("kex: \{e.message()}")
+    e => raise ProtocolError("kex: \{e}")
   }
   if !self.session_id_set {
     self.session_id = self.exchange_hash
@@ -744,8 +744,8 @@ fn parse_host_key_to_pkey(
       if pubkey.length() != 32 {
         raise ProtocolError("kex: ed25519 public key must be 32 bytes")
       }
-      @crypto.PKey::from_raw(@crypto.KeyType::Ed25519, pubkey) catch {
-        e => raise ProtocolError("kex: failed to load ed25519 key: \{e.message()}")
+      @crypto.PKey::from_raw(@crypto.KeyType::ed25519(), pubkey) catch {
+        e => raise ProtocolError("kex: failed to load ed25519 key: \{e}")
       }
     }
     "ssh-rsa" | "rsa-sha2-256" | "rsa-sha2-512" => {
@@ -766,7 +766,7 @@ fn parse_host_key_to_pkey(
         raise ProtocolError("kex: invalid EC point encoding")
       }
       // OpenSSL expects the full point encoding
-      @crypto.PKey::from_raw(@crypto.KeyType::EcP256, q) catch {
+      @crypto.PKey::from_raw(@crypto.KeyType::ec_p256(), q) catch {
         e => raise ProtocolError("kex: failed to load ECDSA key: \{e.message()}")
       }
     }

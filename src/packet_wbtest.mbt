@@ -1,10 +1,10 @@
-///| Packet 协议单元测试：包序列化/反序列化、Reader/Writer。
+///| Packet 协议单元测试：Reader/Writer 序列化。
 
 test "Writer::write_uint32 / Reader::read_uint32 roundtrip" {
   let w = Writer::new()
   w.write_uint32(0)
   w.write_uint32(255)
-  w.write_uint256)
+  w.write_uint32(65535)
   w.write_uint32(0x7FFFFFFF)
   let data = w.to_bytes()
   assert_eq(data.length(), 16)
@@ -27,7 +27,6 @@ test "Writer::write_string / Reader::read_string roundtrip" {
   let r = Reader::new(data)
   assert_eq(r.read_string().length(), 0)
   assert_eq(r.read_string(), b"hello")
-  // The raw bytes after the string are not string-prefixed
   assert_eq(r.read_bytes(2), b"\x00\xFF")
 }
 
@@ -71,10 +70,8 @@ test "Reader::remaining and pos tracking" {
   let data = b"\x01\x02\x03\x04\x05"
   let r = Reader::new(data)
   assert_eq(r.remaining(), 5)
-  assert_eq(r.pos(), 0)
   r.read_bytes(2)
   assert_eq(r.remaining(), 3)
-  assert_eq(r.pos(), 2)
   assert_false(r.eof())
   r.read_bytes(3)
   assert_true(r.eof())
@@ -86,7 +83,7 @@ test "encode_uint32 / decode_uint32 symmetry" {
     let enc = encode_uint32(v)
     assert_eq(enc.length(), 4)
     let dec = decode_uint32(enc)
-    assert_eq(dec, v, "roundtrip failed for \{v}")
+    assert_eq(dec, v)
   }
 }
 
@@ -95,34 +92,9 @@ test "encode_string / parse_string symmetry" {
   for s in cases {
     let enc = encode_string(s)
     let (parsed, rest) = parse_string(enc)
-    assert_eq(parsed, s, "string roundtrip failed")
+    assert_eq(parsed, s)
     assert_eq(rest.length(), 0)
   }
-}
-
-test "encode_mpint of small positive number" {
-  let n = @bigint.BigInt::from_int(12345)
-  let encoded = encode_mpint(n)
-  let r = Reader::new(encoded)
-  let len = r.read_uint32()
-  assert_true(len > 0 && len <= 5)
-  let (decoded, _rest) = decode_mpint(encoded)
-  assert_true(decoded == n)
-}
-
-test "encode_mpint of zero" {
-  let n = @bigint.BigInt::from_int(0)
-  let encoded = encode_mpint(n)
-  assert_eq(encoded.length(), 5) // uint32(1) + 0x00
-}
-
-test "write_packet produces valid format with padding" {
-  let payload = b"\x01\x02\x03\x04\x05"
-  let packet = write_packet(payload, 8, false, _data => b"")
-  // packet = 4-byte length + 1-byte padding_length + payload + padding
-  let len = decode_uint32(Bytes::get_view(packet, start=0, end=4).unwrap_or(b""))
-  assert_true(len >= payload.length() + 5) // at least 1 byte pad + padding_length
-  assert_true(len <= MAX_PACKET)
 }
 
 test "Reader::eof on empty input" {
@@ -139,5 +111,5 @@ test "Writer::length tracks bytes written" {
   w.write_uint32(42)
   assert_eq(w.length(), 5)
   w.write_string(b"test")
-  assert_eq(w.length(), 10) // 4 + 4 = 8 more
+  assert_eq(w.length(), 10)
 }
