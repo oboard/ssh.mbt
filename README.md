@@ -162,23 +162,23 @@ pacman -S mingw-w64-ucrt-x86_64-openssh
 ### 4.2 构建与运行
 
 ```bash
-moon run cmd/main -- user@host --port 22 --exec "uname -a"
+moon run cmd/main --target native -- user@host --port 22 --exec "uname -a"
 ```
 
 ### 4.3 CLI 用法
 
 ```text
-moon run cmd/main -- <user>@<host> [--port 22] [--exec "ls -l"] [--password PWD]
+moon run cmd/main --target native -- <user>@<host> [--port 22] [--exec "ls -l"] [--password PWD]
 ```
 
 示例：
 
 ```bash
 # 交互式（用 SSH agent 或预置公钥的服务器）
-moon run cmd/main -- alice@example.com --exec "uname -a"
+moon run cmd/main --target native -- alice@example.com --exec "uname -a"
 
 # 显式密码
-moon run cmd/main -- bob@192.168.1.10 --port 2222 --password hunter2 --exec "uptime"
+moon run cmd/main --target native -- bob@192.168.1.10 --port 2222 --password hunter2 --exec "uptime"
 ```
 
 ### 4.4 作为库使用
@@ -235,10 +235,10 @@ let opts = @src.ConnectOptions::new("example.com", 22, "alice")
 ### 5.1 修改后必跑
 
 ```bash
-moon fmt          # 格式化
-moon info         # 更新 .mbti 接口
-moon build        # 编译
-moon test         # 测试
+moon fmt                          # 格式化
+moon info                         # 更新 .mbti 接口
+moon build --target native        # 编译
+moon test --target native         # 测试
 ```
 
 ### 5.2 覆盖率

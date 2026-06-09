@@ -9,11 +9,11 @@ This is a MoonBit SSH client library entry for the MoonBit 2026 Open Source Comp
 ## Commands
 
 MoonBit project commands:
-- `moon build` - Build the project
-- `moon test` - Run tests
+- `moon build --target native` - Build the project
+- `moon test --target native` - Run tests
 - `moon add <package>` - Add a dependency
 - `moon fmt` - Format code
-- `moon run cmd/main` - Run the main program
+- `moon run cmd/main --target native` - Run the main program
 
 ## Architecture
 

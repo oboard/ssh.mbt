@@ -41,9 +41,9 @@ connection support as the foundation for the SSH protocol.
 
 ## Tooling
 
-- `moon build` is used to build the project.
+- `moon build --target native` is used to build the project.
 
-- `moon run cmd/main` is used to run the main program.
+- `moon run cmd/main --target native` is used to run the main program.
 
 - `moon add <package>` is used to add dependencies.
 
@@ -62,8 +62,8 @@ connection support as the foundation for the SSH protocol.
   format the code. Check the diffs of `.mbti` file to see if the changes are
   expected.
 
-- Run `moon test` to check tests pass. MoonBit supports snapshot testing; when
-  changes affect outputs, run `moon test --update` to refresh snapshots.
+- Run `moon test --target native` to check tests pass. MoonBit supports snapshot testing; when
+  changes affect outputs, run `moon test --update --target native` to refresh snapshots.
 
 - Prefer `assert_eq` or `assert_true(pattern is Pattern(...))` for results that
   are stable or very unlikely to change. For snapshot tests that record
