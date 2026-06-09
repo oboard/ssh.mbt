@@ -87,6 +87,16 @@ pub fn err_clear() -> Unit {
 }
 
 ///|
+/// Retrieve the error string AND clear the OpenSSL error queue.
+/// This is the safe alternative to calling `err_clear()` before
+/// `err_get_error()` (which would discard the error).
+pub fn err_get_and_clear() -> String {
+  let s = err_get_error()
+  err_clear()
+  s
+}
+
+///|
 /// Convert a fixed array of ASCII bytes (no null terminator) to a MoonBit
 /// `String`. The bytes are interpreted as 7-bit ASCII.
 fn ascii_bytes_to_string(buf : FixedArray[Byte], len : Int) -> String {

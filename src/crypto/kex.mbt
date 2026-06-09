@@ -59,10 +59,9 @@ pub fn x25519_derive(our : PKey, peer_pub : Bytes) -> Bytes raise CryptoError {
     out_len,
   )
   if rc != 1 {
-    err_clear()
     raise CryptoError::OperationFailed(
       "EVP_PKEY_derive (X25519)",
-      err_get_error(),
+      err_get_and_clear(),
     )
   }
   let view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
@@ -103,8 +102,10 @@ pub fn nistp256_derive(
     out_len,
   )
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_PKEY_derive (EC)", err_get_error())
+    raise CryptoError::OperationFailed(
+      "EVP_PKEY_derive (EC)",
+      err_get_and_clear(),
+    )
   }
   let view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
   Bytes::from_fixedarray(view)
@@ -134,8 +135,7 @@ pub fn hkdf_sha256(
     length,
   )
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("HKDF-SHA256", err_get_error())
+    raise CryptoError::OperationFailed("HKDF-SHA256", err_get_and_clear())
   }
   Bytes::from_fixedarray(out)
 }
@@ -162,8 +162,7 @@ pub fn hkdf_sha512(
     length,
   )
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("HKDF-SHA512", err_get_error())
+    raise CryptoError::OperationFailed("HKDF-SHA512", err_get_and_clear())
   }
   Bytes::from_fixedarray(out)
 }

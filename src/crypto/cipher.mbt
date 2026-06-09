@@ -209,8 +209,10 @@ pub fn Cipher::new(
   let rc = cipher_init_ffi(ctx, alg.id(), if encrypt { 1 } else { 0 }, key, iv)
   if rc != 1 {
     cipher_ctx_free_ffi(ctx)
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_EncryptInit_ex", err_get_error())
+    raise CryptoError::OperationFailed(
+      "EVP_EncryptInit_ex",
+      err_get_and_clear(),
+    )
   }
   { ctx, alg, encrypt, is_aead: alg.is_aead() }
 }
@@ -227,8 +229,10 @@ pub fn Cipher::set_tag(self : Cipher, tag : Bytes) -> Unit raise CryptoError {
   let arr = tag.to_fixedarray()
   let rc = cipher_set_tag_ffi(self.ctx, arr, arr.length())
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_CTRL_GCM_SET_TAG", err_get_error())
+    raise CryptoError::OperationFailed(
+      "EVP_CTRL_GCM_SET_TAG",
+      err_get_and_clear(),
+    )
   }
 }
 
@@ -239,8 +243,10 @@ pub fn Cipher::get_tag(self : Cipher) -> Bytes raise CryptoError {
   let arr = FixedArray::make(self.alg.tag_len(), b'\x00')
   let rc = cipher_get_tag_ffi(self.ctx, arr, arr.length())
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_CTRL_GCM_GET_TAG", err_get_error())
+    raise CryptoError::OperationFailed(
+      "EVP_CTRL_GCM_GET_TAG",
+      err_get_and_clear(),
+    )
   }
   Bytes::from_fixedarray(arr)
 }
@@ -266,8 +272,7 @@ pub fn Cipher::update(self : Cipher, in_ : Bytes) -> Bytes raise CryptoError {
     out_len,
   )
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_*Update", err_get_error())
+    raise CryptoError::OperationFailed("EVP_*Update", err_get_and_clear())
   }
   // Trim
   let out_view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
@@ -292,8 +297,7 @@ pub fn Cipher::finalize(self : Cipher) -> Bytes raise CryptoError {
     out_len,
   )
   if rc != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_*Final_ex", err_get_error())
+    raise CryptoError::OperationFailed("EVP_*Final_ex", err_get_and_clear())
   }
   let out_view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
   Bytes::from_fixedarray(out_view)

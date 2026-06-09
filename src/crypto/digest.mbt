@@ -116,8 +116,7 @@ pub fn Hasher::new(alg : Algorithm) -> Hasher raise CryptoError {
   let ctx = md_ctx_new_ffi()
   if md_init_ffi(ctx, alg_id(alg)) != 1 {
     md_ctx_free_ffi(ctx)
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_DigestInit_ex", err_get_error())
+    raise CryptoError::OperationFailed("EVP_DigestInit_ex", err_get_and_clear())
   }
   { ctx, alg }
 }
@@ -125,8 +124,7 @@ pub fn Hasher::new(alg : Algorithm) -> Hasher raise CryptoError {
 ///|
 pub fn Hasher::update(self : Hasher, data : Bytes) -> Unit raise CryptoError {
   if md_update_ffi(self.ctx, data, data.length()) != 1 {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_DigestUpdate", err_get_error())
+    raise CryptoError::OperationFailed("EVP_DigestUpdate", err_get_and_clear())
   }
 }
 
@@ -146,8 +144,10 @@ pub fn Hasher::finalize(self : Hasher) -> Bytes raise CryptoError {
   let rc = md_final_ffi(self.ctx, out, out_len_ref)
   md_ctx_free_ffi(self.ctx)
   if rc != 1 || out_len_ref.val != self.alg.output_len() {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_DigestFinal_ex", err_get_error())
+    raise CryptoError::OperationFailed(
+      "EVP_DigestFinal_ex",
+      err_get_and_clear(),
+    )
   }
   Bytes::from_fixedarray(out)
 }
@@ -168,8 +168,7 @@ pub fn digest(alg : Algorithm, data : Bytes) -> Bytes raise CryptoError {
     out_len_ref,
   )
   if rc != 1 || out_len_ref.val != alg.output_len() {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_Digest", err_get_error())
+    raise CryptoError::OperationFailed("EVP_Digest", err_get_and_clear())
   }
   Bytes::from_fixedarray(out)
 }

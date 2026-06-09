@@ -84,8 +84,7 @@ pub fn hmac(
     out_len_ref,
   )
   if rc != 1 || out_len_ref.val != alg.output_len() {
-    err_clear()
-    raise CryptoError::OperationFailed("EVP_MAC HMAC", err_get_error())
+    raise CryptoError::OperationFailed("EVP_MAC HMAC", err_get_and_clear())
   }
   Bytes::from_fixedarray(out)
 }

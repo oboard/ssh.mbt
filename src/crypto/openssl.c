@@ -651,29 +651,29 @@ int moonbitlang_ssh_pkey_get_id(void *pkey) { return EVP_PKEY_get_id((EVP_PKEY *
 int moonbitlang_ssh_pkey_get_bits(void *pkey) { return EVP_PKEY_get_bits((EVP_PKEY *)pkey); }
 
 int moonbitlang_ssh_pkey_get_raw_public(void *pkey, unsigned char *buf, int *buf_len) {
-  size_t len = 0;
+  size_t len = buf_len ? (size_t)*buf_len : 0;
   int r = EVP_PKEY_get_raw_public_key((const EVP_PKEY *)pkey, buf, &len);
   if (buf_len) *buf_len = (int)len;
   return r;
 }
 
 int moonbitlang_ssh_pkey_get_raw_private(void *pkey, unsigned char *buf, int *buf_len) {
-  size_t len = 0;
+  size_t len = buf_len ? (size_t)*buf_len : 0;
   int r = EVP_PKEY_get_raw_private_key((const EVP_PKEY *)pkey, buf, &len);
   if (buf_len) *buf_len = (int)len;
   return r;
 }
 
 int moonbitlang_ssh_pkey_keygen(int key_type, int bits, void **out) {
-  int id;
+  const char *name = 0;
   switch (key_type) {
-    case 1: id = SSH_PKEY_X25519; break;
-    case 2: id = SSH_PKEY_ED25519; break;
-    case 3: id = SSH_PKEY_RSA; break;
-    case 4: id = SSH_PKEY_EC; break;
+    case 1: name = "X25519"; break;
+    case 2: name = "Ed25519"; break;
+    case 3: name = "RSA"; break;
+    case 4: name = "EC"; break;
     default: return 0;
   }
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(id, 0);
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, name, 0);
   if (!ctx) return 0;
   int ok = 1;
   EVP_PKEY *pkey = 0;
