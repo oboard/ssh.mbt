@@ -301,7 +301,7 @@ typedef struct bn_ctx_st      BN_CTX;
   IMPORT_FUNC(int, EVP_PKEY_fromdata, (EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey, int selection, const void *params)) \
   IMPORT_FUNC(EVP_PKEY *, EVP_PKEY_new, (void)) \
   IMPORT_FUNC(void, EVP_PKEY_free, (EVP_PKEY *pkey)) \
-  IMPORT_FUNC(int, EVP_PKEY_size, (const EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_PKEY_get_size, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_id, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_bits, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_raw_public_key, (const EVP_PKEY *pkey, unsigned char *pub, size_t *len)) \
@@ -317,9 +317,9 @@ typedef struct bn_ctx_st      BN_CTX;
   IMPORT_FUNC(int, EVP_PKEY_derive_set_peer, (EVP_PKEY_CTX *ctx, EVP_PKEY *peer)) \
   IMPORT_FUNC(int, EVP_PKEY_derive, (EVP_PKEY_CTX *ctx, unsigned char *key, size_t *keylen)) \
   IMPORT_FUNC(int, EVP_PKEY_CTX_set_hkdf_md, (EVP_PKEY_CTX *ctx, const EVP_MD *md)) \
-  IMPORT_FUNC(int, EVP_PKEY_CTX_set_hkdf_salt, (EVP_PKEY_CTX *ctx, const unsigned char *salt, int saltlen)) \
-  IMPORT_FUNC(int, EVP_PKEY_CTX_set_hkdf_key, (EVP_PKEY_CTX *ctx, const unsigned char *key, int keylen)) \
-  IMPORT_FUNC(int, EVP_PKEY_CTX_set_hkdf_info, (EVP_PKEY_CTX *ctx, const unsigned char *info, int infolen)) \
+  IMPORT_FUNC(int, EVP_PKEY_CTX_set1_hkdf_salt, (EVP_PKEY_CTX *ctx, const unsigned char *salt, int saltlen)) \
+  IMPORT_FUNC(int, EVP_PKEY_CTX_set1_hkdf_key, (EVP_PKEY_CTX *ctx, const unsigned char *key, int keylen)) \
+  IMPORT_FUNC(int, EVP_PKEY_CTX_add1_hkdf_info, (EVP_PKEY_CTX *ctx, const unsigned char *info, int infolen)) \
   /* DER i/o for keys */ \
   IMPORT_FUNC(int, i2d_PUBKEY, (const EVP_PKEY *a, unsigned char **pp)) \
   IMPORT_FUNC(EVP_PKEY *, d2i_PUBKEY, (EVP_PKEY **a, const unsigned char **pp, long length)) \
@@ -334,8 +334,8 @@ typedef struct bn_ctx_st      BN_CTX;
   /* bignum */ \
   IMPORT_FUNC(BIGNUM *, BN_new, (void)) \
   IMPORT_FUNC(void, BN_free, (BIGNUM *a)) \
-  IMPORT_FUNC(int, BN_num_bytes, (const BIGNUM *a)) \
   IMPORT_FUNC(int, BN_num_bits, (const BIGNUM *a)) \
+  /* NOTE: BN_num_bytes removed in OpenSSL 3.5; use (BN_num_bits+7)/8 */ \
   IMPORT_FUNC(BIGNUM *, BN_bin2bn, (const unsigned char *s, int len, BIGNUM *ret)) \
   IMPORT_FUNC(int, BN_bn2bin, (const BIGNUM *a, unsigned char *to)) \
   IMPORT_FUNC(int, BN_bn2binpad, (const BIGNUM *a, unsigned char *to, int tolen)) \
@@ -591,7 +591,7 @@ void *moonbitlang_ssh_pkey_new(void) { return EVP_PKEY_new(); }
 
 void moonbitlang_ssh_pkey_free(void *pkey) { if (pkey) EVP_PKEY_free((EVP_PKEY *)pkey); }
 
-int moonbitlang_ssh_pkey_size(void *pkey) { return EVP_PKEY_size((EVP_PKEY *)pkey); }
+int moonbitlang_ssh_pkey_size(void *pkey) { return EVP_PKEY_get_size((EVP_PKEY *)pkey); }
 
 int moonbitlang_ssh_pkey_get_id(void *pkey) { return EVP_PKEY_get_id((EVP_PKEY *)pkey); }
 
@@ -852,9 +852,9 @@ int moonbitlang_ssh_hkdf(
   int ok = 1;
   if (EVP_PKEY_derive_init(ctx) <= 0) ok = 0;
   if (ok && EVP_PKEY_CTX_set_hkdf_md(ctx, md) <= 0) ok = 0;
-  if (ok && salt && salt_len > 0 && EVP_PKEY_CTX_set_hkdf_salt(ctx, salt, salt_len) <= 0) ok = 0;
-  if (ok && ikm && ikm_len > 0 && EVP_PKEY_CTX_set_hkdf_key(ctx, ikm, ikm_len) <= 0) ok = 0;
-  if (ok && info && info_len > 0 && EVP_PKEY_CTX_set_hkdf_info(ctx, info, info_len) <= 0) ok = 0;
+  if (ok && salt && salt_len > 0 && EVP_PKEY_CTX_set1_hkdf_salt(ctx, salt, salt_len) <= 0) ok = 0;
+  if (ok && ikm && ikm_len > 0 && EVP_PKEY_CTX_set1_hkdf_key(ctx, ikm, ikm_len) <= 0) ok = 0;
+  if (ok && info && info_len > 0 && EVP_PKEY_CTX_add1_hkdf_info(ctx, info, info_len) <= 0) ok = 0;
   size_t len = (size_t)okm_len;
   if (ok) {
     if (EVP_PKEY_derive(ctx, okm, &len) <= 0) ok = 0;
@@ -877,7 +877,7 @@ int moonbitlang_ssh_bn_bn2bin(void *bn, unsigned char *buf) {
 int moonbitlang_ssh_bn_bn2binpad(void *bn, unsigned char *buf, int len) {
   return BN_bn2binpad((BIGNUM *)bn, buf, len);
 }
-int moonbitlang_ssh_bn_num_bytes(void *bn) { return BN_num_bytes((BIGNUM *)bn); }
+int moonbitlang_ssh_bn_num_bytes(void *bn) { return (BN_num_bits((BIGNUM *)bn) + 7) / 8; }
 int moonbitlang_ssh_bn_num_bits(void *bn) { return BN_num_bits((BIGNUM *)bn); }
 int moonbitlang_ssh_bn_mod_exp(void *r, void *a, void *p, void *m) {
   return BN_mod_exp((BIGNUM *)r, (BIGNUM *)a, (BIGNUM *)p, (BIGNUM *)m, 0);

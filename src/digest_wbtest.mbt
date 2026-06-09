@@ -20,7 +20,7 @@ test "SHA-256 abc" {
 test "SHA-256 oneshot matches incremental" {
   let data = @utf8.encode("The quick brown fox jumps over the lazy dog")
   let one = @crypto.digest(@crypto.Algorithm::sha256(), data)
-  let mut h = @crypto.Hasher::new(@crypto.Algorithm::sha256())
+  let h = @crypto.Hasher::new(@crypto.Algorithm::sha256())
   h.update(@utf8.encode("The quick brown fox "))
   h.update(@utf8.encode("jumps over the lazy dog"))
   let two = h.finalize()

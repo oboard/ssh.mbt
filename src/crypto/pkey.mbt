@@ -70,7 +70,7 @@ extern "C" fn pkey_new_raw_ffi(
   raw : Bytes,
   raw_len : Int,
   out : Ref[Pkey],
-) -> Int = "moonbitlang_ssh_pkey_new_raw"
+) -> Int = "moonbitlang_ssh_pkey_new_raw_private"
 
 ///|
 #borrow(scalar, out)
@@ -120,7 +120,7 @@ extern "C" fn pkey_get_raw_pub_ffi(
   p : Pkey,
   buf : FixedArray[Byte],
   buf_len : Ref[Int],
-) -> Int = "moonbitlang_ssh_pkey_get_raw_pub"
+) -> Int = "moonbitlang_ssh_pkey_get_raw_public"
 
 ///|
 #borrow(buf, buf_len)
@@ -128,7 +128,7 @@ extern "C" fn pkey_get_raw_priv_ffi(
   p : Pkey,
   buf : FixedArray[Byte],
   buf_len : Ref[Int],
-) -> Int = "moonbitlang_ssh_pkey_get_raw_priv"
+) -> Int = "moonbitlang_ssh_pkey_get_raw_private"
 
 ///|
 extern "C" fn pkey_size_ffi(p : Pkey) -> Int = "moonbitlang_ssh_pkey_size"
