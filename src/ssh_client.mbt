@@ -115,7 +115,7 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
   let banner_line = read_line(conn) catch {
     e => raise IoError("read banner: \{e}")
   }
-  if not(banner_line.has_prefix("SSH-")) {
+  if !(banner_line.has_prefix("SSH-")) {
     raise ProtocolError("server banner missing SSH- prefix: \{banner_line}")
   }
   let v_c = @utf8.encode(client_banner)

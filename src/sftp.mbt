@@ -113,7 +113,7 @@ pub enum SftpError {
   PermissionDenied(String)
   /// Other I/O error.
   IoError(String)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Open an SFTP session on an existing SSH `Channel` (must already be in

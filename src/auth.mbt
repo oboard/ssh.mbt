@@ -70,10 +70,10 @@ pub fn build_userauth_request(
     w.write_byte(0) // FALSE for password change
     w.write_string_from_str(password.unwrap_or(""))
   } else if auth_method == "publickey" {
-    w.write_byte(if has_signature.or(false) { 1 } else { 0 })
+    w.write_byte(if has_signature.unwrap_or(false) { 1 } else { 0 })
     w.write_string_from_str(pubkey_alg.unwrap_or(""))
     w.write_string(pubkey_blob.unwrap_or(b""))
-    if has_signature.or(false) {
+    if has_signature.unwrap_or(false) {
       w.write_string(signature.unwrap_or(b""))
     }
   }
@@ -121,7 +121,7 @@ pub enum AuthReply {
   PasswordChangeRequired
   /// Service request was accepted (e.g. `ssh-userauth`).
   ServiceAccept
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 // Factory functions for cross-package construction
 
@@ -173,7 +173,7 @@ pub enum AuthState {
   Authenticated
   /// Authentication failed terminally.
   Rejected(Array[String])
-} derive(Eq, Show)
+} derive(Eq, Debug)
 
 // Factory functions for cross-package construction
 
