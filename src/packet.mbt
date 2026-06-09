@@ -279,15 +279,20 @@ pub fn read_packet(
   if 1 + padding_length > plaintext.length() {
     raise ProtocolError("read_packet: padding_length too large")
   }
-  match
+  let payload_len = plaintext.length() - 1 - padding_length
+  let payload = match
     Bytes::get_view(plaintext, start=1, end=plaintext.length() - padding_length) {
     Some(view) => BytesView::to_owned(view)
     None => raise ProtocolError("read_packet: payload slice")
   }
+  payload
 }
 
 ///|
 /// Serialize a payload into a single SSH packet (with random padding).
+/// OpenSSH checks: (packet_length - 1) % block_size == 4 (for non-initial KEX).
+/// packet_length = 1 + len(payload) + padding_length.
+/// So we need (payload_len + padding_length) % block_size == 4.
 pub fn write_packet(
   payload : Bytes,
   block_size : Int,
@@ -296,8 +301,9 @@ pub fn write_packet(
 ) -> Bytes raise SshError {
   let bs = if block_size < 8 { 8 } else { block_size }
   let min_pad = 4
+  let payload_len = payload.length()
   let mut padding_length = min_pad
-  while (1 + payload.length() + padding_length) % bs != 0 {
+  while (payload_len + padding_length) % bs != 4 {
     padding_length = padding_length + 1
   }
   let padding = packet_random_bytes(padding_length)

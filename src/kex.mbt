@@ -18,14 +18,16 @@
 /// Algorithm name registry. Used in the SSH KEXINIT exchange.
 pub fn kex_algorithms() -> Array[String] {
   [
-    "curve25519-sha256", "curve25519-sha256@libssh.org", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256",
+    "curve25519-sha256@libssh.org", "curve25519-sha256", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256",
     "diffie-hellman-group14-sha1",
   ]
 }
 
 ///|
 pub fn server_host_key_algorithms() -> Array[String] {
-  ["ssh-ed25519", "ecdsa-sha2-nistp256", "rsa-sha2-256", "ssh-rsa"]
+  [
+    "ssh-ed25519", "ecdsa-sha2-nistp256", "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa",
+  ]
 }
 
 ///|
@@ -314,6 +316,21 @@ fn update_exchange_hash_prefix(
 ///|
 /// `mpint` encoding for SSH: same as `encode_mpint(BigInt)` but for raw
 /// big-endian bytes. Adds a leading 0x00 if the high bit is set.
+
+///|
+/// Reverse bytes (swap endianness). X25519 shared secret is little-endian
+/// but SSH mpint encoding expects big-endian.
+fn reverse_bytes(b : Bytes) -> Bytes {
+  let n = b.length()
+  let arr = b.to_fixedarray()
+  let out = FixedArray::make(n, b'\x00')
+  for i in 0..<n {
+    out[i] = arr.unsafe_get(n - 1 - i)
+  }
+  Bytes::from_fixedarray(out)
+}
+
+///|
 pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
   if bytes.length() == 0 {
     return encode_string(b"\x00")
@@ -410,9 +427,7 @@ pub struct DerivedKeys {
 /// SSH_MSG_NEWKEYS exchange. The actual key generation and exchange logic is
 /// implemented by callers; this struct only tracks state.
 pub struct Kex {
-  priv state : @string.View // marker; replaced by enum below
-  // We use a plain String field for the state name since `@string.View`
-  // would require importing another pkg; this is a stub type.
+  priv state : @string.View // current state marker
 }
 
 ///|
@@ -531,6 +546,8 @@ pub fn KexContext::drive(
   self.transition_to(SentKexinit)
   let server_kexinit = read_packet()
   self.i_s = server_kexinit
+  let i_s_len = server_kexinit.length()
+  println("DEBUG i_s after read len=\{i_s_len}")
   let server = parse_kexinit(server_kexinit)
   self.transition_to(Negotiating)
   self.kex_alg = require_algorithm("kex", server.first(kex_algorithms()))
@@ -628,10 +645,15 @@ fn KexContext::drive_curve25519(
   let client_public = ephemeral.raw_public() catch {
     e => raise ProtocolError("kex: \{e}")
   }
+
   self.ephemeral = Some(ephemeral)
   write_packet(build_ecdh_init_payload(client_public))
   self.transition_to(SentDhInit)
-  let reply = parse_ecdh_reply_payload(read_packet())
+  let raw_reply = read_packet()
+  println(
+    "DEBUG got ECDH REPLY size=\{raw_reply.length()} first=\{raw_reply.unsafe_get(0).to_int()}",
+  )
+  let reply = parse_ecdh_reply_payload(raw_reply)
   let host_key_alg = parse_host_key_algorithm(reply.host_key)
   if host_key_alg != self.host_key_alg {
     raise ProtocolError(
@@ -645,7 +667,21 @@ fn KexContext::drive_curve25519(
   let shared = @crypto.x25519_derive(ephemeral, reply.server_public) catch {
     e => raise ProtocolError("kex: \{e}")
   }
-  self.shared_secret = shared
+  // X25519 shared secret is in little-endian; SSH mpint expects big-endian
+  let shared_be = shared // try without reversal first
+  println(
+    "DEBUG shared len=\{shared.length()} first=\{shared.unsafe_get(0).to_int()} last=\{shared.unsafe_get(31).to_int()}",
+  )
+  println(
+    "DEBUG shared_be len=\{shared_be.length()} first=\{shared_be.unsafe_get(0).to_int()}",
+  )
+  println(
+    "DEBUG i_c len=\{self.i_c.length()} first=\{self.i_c.unsafe_get(0).to_int()}",
+  )
+  println(
+    "DEBUG i_s len=\{self.i_s.length()} first=\{self.i_s.unsafe_get(0).to_int()}",
+  )
+  self.shared_secret = shared_be
   self.exchange_hash = compute_ecdh_exchange_hash(
     hash_algorithm_for_kex(self.kex_alg),
     self.v_c,
@@ -655,10 +691,11 @@ fn KexContext::drive_curve25519(
     reply.host_key,
     client_public,
     reply.server_public,
-    shared,
+    shared_be,
   ) catch {
     e => raise ProtocolError("kex: \{e}")
   }
+  println("DEBUG exchange_hash len=\{self.exchange_hash.length()}")
   if !self.session_id_set {
     self.session_id = self.exchange_hash
     self.session_id_set = true
@@ -720,6 +757,9 @@ fn verify_host_key_signature(
       raise ProtocolError("kex: signature verification failed: \{e.message()}")
   }
 
+  println(
+    "DEBUG verify alg=\{sig_blob.alg} md=\{md_alg} hash_len=\{exchange_hash.length()} sig_len=\{sig_blob.sig.length()} valid=\{valid}",
+  )
   if !valid {
     raise ProtocolError("kex: host key signature is invalid")
   }

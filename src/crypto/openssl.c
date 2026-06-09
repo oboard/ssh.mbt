@@ -319,6 +319,7 @@ typedef struct ossl_param_st {
   IMPORT_FUNC(void, EVP_PKEY_free, (EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_size, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_id, (const EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_PKEY_is_a, (const EVP_PKEY *pkey, const char *name)) \
   IMPORT_FUNC(int, EVP_PKEY_get_bits, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_raw_public_key, (const EVP_PKEY *pkey, unsigned char *pub, size_t *len)) \
   IMPORT_FUNC(int, EVP_PKEY_get_raw_private_key, (const EVP_PKEY *pkey, unsigned char *priv, size_t *len)) \
@@ -776,10 +777,10 @@ int moonbitlang_ssh_pkey_derive(
   if (!our_pkey || !peer_pub) return 0;
   int id = EVP_PKEY_get_id((const EVP_PKEY *)our_pkey);
   EVP_PKEY *peer = 0;
-  if (id == SSH_PKEY_X25519) {
+  if (EVP_PKEY_is_a((EVP_PKEY *)our_pkey, "X25519")) {
     EVP_PKEY_CTX *cctx = EVP_PKEY_CTX_new_from_name(0, "X25519", 0);
     if (!cctx) return 0;
-    void *params = build_octet_param("public_key", peer_pub, (size_t)peer_pub_len);
+    void *params = build_octet_param("pub", peer_pub, (size_t)peer_pub_len);
     if (!params) { EVP_PKEY_CTX_free(cctx); return 0; }
     if (EVP_PKEY_fromdata_init(cctx) <= 0 || EVP_PKEY_fromdata(cctx, &peer, EVP_PKEY_PUBLIC_KEY, params) <= 0) {
       EVP_PKEY_CTX_free(cctx);
@@ -812,12 +813,12 @@ int moonbitlang_ssh_pkey_new_raw_private(int key_type,
                                           void **out) {
   const char *name = 0;
   int is_pub = 0;
-  const char *field = "private_key";
+  const char *field = "priv";
   switch (key_type) {
     case 1: name = "X25519"; break;
     case 2: name = "ED25519"; break;
-    case 5: name = "X25519"; is_pub = 1; field = "public_key"; break;
-    case 6: name = "ED25519"; is_pub = 1; field = "public_key"; break;
+    case 5: name = "X25519"; is_pub = 1; field = "pub"; break;
+    case 6: name = "ED25519"; is_pub = 1; field = "pub"; break;
     default: return 0;
   }
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, name, 0);

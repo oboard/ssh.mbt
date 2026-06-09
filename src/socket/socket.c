@@ -325,7 +325,8 @@ int socket_send_bytes(int handle, moonbit_bytes_t data, int data_len) {
 
 int socket_recv(int handle, moonbit_bytes_t buffer, int offset, int size) {
     uint8_t *buf_ptr = (uint8_t *)buffer;
-    return (int)recv(handle, (char *)(buf_ptr + offset), (size_t)size, 0);
+    int result = (int)recv(handle, (char *)(buf_ptr + offset), (size_t)size, 0);
+    return result;
 }
 
 void socket_close(int handle) {

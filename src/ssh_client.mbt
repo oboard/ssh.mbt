@@ -200,7 +200,10 @@ pub fn Client::auth_password(
 }
 
 ///|
+
+///|
 /// Authenticate with a public key.
+/// v0.1: stub — `auth.mbt` has the implementation, needs wiring up here.
 pub fn Client::auth_publickey(
   self : Client,
   _key : Bytes,
@@ -222,7 +225,6 @@ pub fn Client::open_session(self : Client) -> Channel {
 
 ///|
 /// Send an `exec` request and read the resulting stdout / exit-status.
-/// v0.1: stub — needs the full transport + channel pump.
 pub fn Client::exec(
   self : Client,
   channel : Channel,
@@ -316,18 +318,27 @@ fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
 ///|
 fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
-    Connected(conn) =>
-      read_packet(
-        size => {
-          conn.read_exact(size) catch {
-            e => raise IoError("read packet: \{e}")
-          }
-        },
-        8,
-        0,
-        body => body,
-        (_data, _mac) => (),
+    Connected(conn) => {
+      let len_raw = conn.read_exact(4) catch {
+        e => raise IoError("read packet: \{e}")
+      }
+      let pkt_len = decode_uint32(len_raw)
+      println("DEBUG read_packet: pkt_len=\{pkt_len}")
+      let body = conn.read_exact(pkt_len) catch {
+        e => raise IoError("read packet: body=\{pkt_len}: \{e}")
+      }
+      let pad_len = body.unsafe_get(0).to_int()
+      let payload_end = body.length() - pad_len
+      let payload = match Bytes::get_view(body, start=1, end=payload_end) {
+        Some(v) => BytesView::to_owned(v)
+        None => raise ProtocolError("read_plain packet: slice")
+      }
+      let msg_val = payload.unsafe_get(0).to_int()
+      println(
+        "DEBUG read_packet: pad=\{pad_len} payload_len=\{payload.length()} msg=\{msg_val}",
       )
+      payload
+    }
   }
 }
 
@@ -337,6 +348,18 @@ fn Client::write_plain_packet(
   payload : Bytes,
 ) -> Unit raise SshError {
   let packet = write_packet(payload, 8, false, _data => b"")
+  let pl = payload.length()
+  let b0 = if packet.length() >= 4 { packet.unsafe_get(0).to_int() } else { 0 }
+  let b1 = if packet.length() >= 4 { packet.unsafe_get(1).to_int() } else { 0 }
+  let b2 = if packet.length() >= 4 { packet.unsafe_get(2).to_int() } else { 0 }
+  let b3 = if packet.length() >= 4 { packet.unsafe_get(3).to_int() } else { 0 }
+  let body_len = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+  let pad_len = if packet.length() >= 5 {
+    packet.unsafe_get(4).to_int()
+  } else {
+    0
+  }
+  println("DEBUG write: plen=\{pl} body=\{body_len} pad=\{pad_len}")
   match self.conn {
     Connected(conn) =>
       conn.write_bytes(packet) catch {

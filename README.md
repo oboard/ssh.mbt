@@ -6,19 +6,22 @@
 
 **当前版本：v0.1（协议骨架）**
 
-| 能力 | 状态 |
-|------|------|
-| TCP 传输层 | ✅ 基于 `moonbitlang/async/socket` |
-| 客户端/服务端 Banner 交换 | ✅ 落地 |
-| 包二进制编解码（packet） | ✅ `src/packet.mbt`（length / padding / payload / MAC） |
-| KEXINIT 帧与算法协商 | ✅ `src/kex.mbt` |
-| KEX 状态机（X25519 / nistp256 ECDH） | ✅ 状态机写完；驱动循环（transport 接线）仍为 stub |
-| 密码认证 | ⚠️ `auth.mbt` 构建请求；传输层接线为 stub |
-| 公钥认证 | ⚠️ 同上 |
-| `exec` / `shell` 通道 | ⚠️ `channel.mbt` 框架在；完整 pump 仍为 stub |
-| `known_hosts` 解析 | ✅ 基础解析 |
-| SFTP | ⚠️ 仅类型签名（v0.2） |
-| Windows 编译 | ✅ 链接桩已就位（运行时仍需非 Windows 主机完成真实 KEX） |
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| TCP 传输层 | ✅ | 基于 `moonbitlang/async/socket` |
+| Banner 交换 | ✅ | `Client::connect()` 完成 |
+| 包二进制编解码 | ✅ | `src/packet.mbt`：length / padding / payload / MAC，支持 EtM 和 AEAD 模式 |
+| KEXINIT 协商 | ✅ | `src/kex.mbt`：curve25519-sha256 / ecdh-sha2-nistp256 / diffie-hellman-group14 |
+| 密钥派生 | ✅ | HKDF-SHA256/SHA512，`derive_keys()` 实现 |
+| 主机密钥验证 | ✅ | 支持 ssh-ed25519 / rsa-sha2-* / ecdsa-sha2-nistp256 |
+| 密码认证 | ✅ | `Client::auth_password()` 完整流程 |
+| 公钥认证 | ⚠️ | `auth.mbt` 实现中，`Client::auth_publickey()` 待接线 |
+| `exec` 命令执行 | ✅ | `Client::exec()` 完整流程：open_session → exec → 读取 stdout → exit-status |
+| `shell` / pty | ❌ | 未实现 |
+| 端口转发 / X11 | ❌ | 未实现 |
+| `known_hosts` 解析 | ✅ | 基础解析；HMAC-SHA1 哈希形式待支持 |
+| SFTP | ❌ | `src/sftp.mbt` 为 v0.2 stub |
+| Windows KEX | ⚠️ | 链接桩就位，运行时需非 Windows 主机 |
 
 ## 2. 架构
 
@@ -107,15 +110,21 @@ code/
 ├── LICENSE                      Apache-2.0
 ├── moon.mod                     模块清单（name: PaiGack/ssh_client）
 ├── moon.pkg                     根包（仅导入子包）
-├── ssh_client.mbt               
+├── ssh_client.mbt
 ├── ssh_client_test.mbt          黑盒测试
 ├── ssh_client_wbtest.mbt        白盒测试
+├── tests/                       测试脚本（调试 / 协议验证）
+│   ├── test_ssh.sh             SSH 协议完整握手测试
+│   ├── test_kexinit.sh         KEXINIT 协商测试
+│   ├── test_ecdh_reply.sh      ECDH 密钥交换测试
+│   ├── debug_kex.sh            KEX 调试脚本
+│   └── *.sh                    其他调试与集成测试
 ├── src/                         ★ 核心库
 │   ├── moon.pkg                 子包：PaiGack/ssh_client/src
 │   ├── ssh_client.mbt           顶层 API（ConnectOptions / Client）
 │   ├── packet.mbt               包序列化（length/padding/payload/MAC）
-│   ├── kex.mbt                  KEXINIT 状态机
-│   ├── auth.mbt                 用户认证
+│   ├── kex.mbt                  KEXINIT 状态机、密钥派生
+│   ├── auth.mbt                 用户认证（password / publickey）
 │   ├── channel.mbt              通道（session/exec/shell）
 │   ├── known_hosts.mbt          known_hosts 解析
 │   ├── sftp.mbt                 SFTP（v0.2 stub）
@@ -167,19 +176,51 @@ moon run cmd/main --target native -- user@host --port 22 --exec "uname -a"
 
 ### 4.3 CLI 用法
 
-```text
-moon run cmd/main --target native -- <user>@<host> [--port 22] [--exec "ls -l"] [--password PWD]
+通过 `MOONBIT_CLI_ARGS` 环境变量传递参数：
+
+```bash
+export MOONBIT_CLI_ARGS="<user>@<host> [--port 22] [--exec 'CMD'] [--password PWD]"
+
+moon run cmd/main --target native
 ```
 
 示例：
 
 ```bash
-export MOONBIT_CLI_ARGS="xxx@xxx.xxx.xxx.xxx --port 22 --exec 'uname -a'"
+export MOONBIT_CLI_ARGS="xxx@xxx --port 22 --exec 'uname -a'"
 
 moon run cmd/main --target native
 ```
 
-### 4.4 作为库使用
+直接传参（需 `--` 分隔）：
+
+```bash
+moon run cmd/main --target native -- xxx@xxx --port 22 --exec 'uname -a'
+```
+
+### 4.4 调试与测试脚本
+
+`tests/` 目录下包含用于调试和协议验证的 shell 脚本：
+
+| 脚本 | 用途 |
+|------|------|
+| `test_ssh.sh` | SSH 协议完整握手流程测试 |
+| `test_kexinit.sh` | KEXINIT 协商过程测试 |
+| `test_ecdh_reply.sh` | ECDH 密钥交换响应测试 |
+| `debug_kex.sh` | KEX 算法协商调试 |
+| `test_normal.sh` | 标准 SSH 连接测试 |
+| `test_combined*.sh` | 组合测试 |
+| `test_ecd.sh` | ECDH 相关测试 |
+
+运行示例：
+
+```bash
+cd tests
+chmod +x test_ssh.sh
+timeout 10 ./test_ssh.sh
+```
+
+### 4.5 作为库使用
 
 `moon.mod` 中声明的模块名是 `PaiGack/ssh_client`，核心 API 落在子包 `PaiGack/ssh_client/src`：
 
@@ -256,20 +297,25 @@ moon coverage analyze > uncovered.log
 
 ## 6. 路线图
 
-| 版本 | 内容 |
-|------|------|
-| **v0.1**（当前） | 协议骨架：packet / kex 状态机 / auth 框架 / channel 框架 / crypto FFI 全套 |
-| **v0.2** | KEX 驱动循环接通真实 transport；密码/公钥认证全链路；`exec` 端到端；集成测试（`openssh-server` 容器） |
-| **v0.3** | SFTP 协议层（基于现有 `sftp.mbt` 类型签名落地） |
-| **v1.0** | 文档补全 + CI 矩阵（Linux/macOS/Windows）+ 发布到 mooncakes.io |
+| 版本 | 内容 | 状态 |
+|------|------|------|
+| **v0.1**（当前） | 协议骨架：packet / kex 状态机 / auth 框架 / channel 框架 / crypto FFI 全套 | 🚧 实现中 |
+| **v0.2** | KEX 驱动循环接通真实 transport；公钥认证完整链路；`exec` 端到端验证；集成测试（`openssh-server` 容器） | 📋 待开发 |
+| **v0.3** | SFTP 协议层（基于现有 `sftp.mbt` 类型签名落地） | 📋 待开发 |
+| **v1.0** | 文档补全 + CI 矩阵（Linux/macOS/Windows）+ 发布到 mooncakes.io | 📋 待开发 |
+
+**v0.1 待完成项：**
+- [ ] 公钥认证（`auth_publickey()`）接线
+- [ ] 主机密钥验证（`known_hosts` 哈希形式支持）
+- [ ] 与真实 sshd 完整集成测试
 
 ## 7. 跨平台注意
 
-| 平台 | 编译 | 运行 |
-|------|------|------|
-| Linux glibc | ✅ | ✅ |
-| macOS | ✅ | ✅ |
-| Windows MinGW | ✅ | ✅ |
+| 平台 | 编译 | 运行 | 说明 |
+|------|------|------|------|
+| Linux glibc | ✅ | ✅ | 完全支持 |
+| macOS | ✅ | ✅ | 完全支持 |
+| Windows MinGW | ✅ | ⚠️ | 编译通过；KEX/Crypto 操作需非 Windows 主机 |
 
 ## 8. 引用
 

@@ -50,7 +50,7 @@ pub fn KnownHost::matches(self : KnownHost, host : String, port : Int) -> Bool {
 /// Match a pattern against a host string. Supports `*` and `?` wildcards.
 fn pattern_matches(pat : String, host : String) -> Bool {
   if pat.has_prefix("|1|") {
-    // Hashed form — TODO: support HMAC-SHA1 hashed hostnames
+    // Hashed form — not yet supported (requires HMAC-SHA1 to verify hash)
     return false
   }
   if not(pat.contains("*") || pat.contains("?")) {
