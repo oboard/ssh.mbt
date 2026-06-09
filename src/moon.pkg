@@ -15,5 +15,12 @@ options(
     "sftp.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],
     "kex_wbtest.mbt": [ "native" ],
+    "digest_test.mbt": [ "native" ],
+    "mac_test.mbt": [ "native" ],
+    "cipher_test.mbt": [ "native" ],
+    "packet_test.mbt": [ "native" ],
+    "known_hosts_test.mbt": [ "native" ],
+    "auth_test.mbt": [ "native" ],
+    "channel_test.mbt": [ "native" ],
   },
 )
