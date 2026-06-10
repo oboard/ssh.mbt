@@ -228,13 +228,28 @@ void socket_close(int handle) {
     p_closesocket(sock);
 }
 
+/*
+ * Set TCP_NODELAY (disable Nagle's algorithm) on the socket.
+ * Returns 0 on success, -1 on error.
+ */
+int socket_set_nodelay(int handle) {
+    if (!p_send && load_winsock() != 0) {
+        return -1;
+    }
+    char flag = 1;
+    SOCKET sock = (SOCKET)handle;
+    return setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+}
+
 #else
 // Unix/Linux implementation placeholder
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <errno.h>
 
 static int send_all(int sock, const char *buffer, int data_len) {
     int sent = 0;
@@ -320,17 +335,49 @@ int socket_send(int handle, moonbit_string_t data_str) {
 
 int socket_send_bytes(int handle, moonbit_bytes_t data, int data_len) {
     const char *buffer = (const char *)data;
+    fprintf(stderr, "socket_send_bytes: sending %d bytes on fd=%d\n", data_len, handle);
+    // Print first 16 bytes of payload for debugging
+    if (data_len > 0 && data_len <= 64) {
+        fprintf(stderr, "socket_send_bytes: data dump:");
+        for (int i = 0; i < data_len; i++) {
+            fprintf(stderr, " %02x", (unsigned char)buffer[i]);
+        }
+        fprintf(stderr, "\n");
+    } else if (data_len > 64) {
+        fprintf(stderr, "socket_send_bytes: data dump (first 32):");
+        for (int i = 0; i < 32; i++) {
+            fprintf(stderr, " %02x", (unsigned char)buffer[i]);
+        }
+        fprintf(stderr, " ...\n");
+    }
     return send_all(handle, buffer, data_len);
 }
 
 int socket_recv(int handle, moonbit_bytes_t buffer, int offset, int size) {
     uint8_t *buf_ptr = (uint8_t *)buffer;
     int result = (int)recv(handle, (char *)(buf_ptr + offset), (size_t)size, 0);
+    if (result == 0) {
+        /* Connection closed gracefully by peer */
+        fprintf(stderr, "socket_recv: connection closed (fd=%d)\n", handle);
+    } else if (result < 0) {
+        /* Error occurred */
+        fprintf(stderr, "socket_recv: error %d (errno=%d: %s) on fd=%d\n",
+                result, errno, strerror(errno), handle);
+    }
     return result;
 }
 
 void socket_close(int handle) {
     close(handle);
+}
+
+/*
+ * Set TCP_NODELAY (disable Nagle's algorithm) on the socket.
+ * Returns 0 on success, -1 on error.
+ */
+int socket_set_nodelay(int handle) {
+    int flag = 1;
+    return setsockopt(handle, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
 }
 
 #endif

@@ -48,6 +48,12 @@ extern "C" fn socket_recv(
 extern "C" fn socket_close(handle : Int) -> Unit = "socket_close"
 
 ///|
+/// Set TCP_NODELAY on the given socket (disable Nagle's algorithm).
+/// Critical for SSH-style interactive protocols where small packets
+/// must be sent without waiting for ACK.
+extern "C" fn socket_set_nodelay(handle : Int) -> Int = "socket_set_nodelay"
+
+///|
 /// Connect to a remote host
 pub fn Tcp::connect_to_host(host : String, port~ : Int) -> Tcp raise {
   // Initialize Winsock on Windows
@@ -69,6 +75,13 @@ pub fn Tcp::connect_to_host(host : String, port~ : Int) -> Tcp raise {
     raise IoError(
       "Failed to connect to \{host}:\{port}, error code: \{conn_result}",
     )
+  }
+
+  // Disable Nagle's algorithm for SSH-style interactive protocols
+  let nodelay_result = socket_set_nodelay(handle)
+  if nodelay_result < 0 {
+    // Non-fatal: log but continue; some environments may not support it
+    println("Warning: failed to set TCP_NODELAY")
   }
 
   { handle, host, port }

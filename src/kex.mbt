@@ -542,9 +542,13 @@ pub fn KexContext::drive(
   if self.state != Initial {
     raise ProtocolError("kex: invalid state \{self.state}")
   }
+  // Wrap the raw reader so that SSH_MSG_EXT_INFO (RFC 8308),
+  // SSH_MSG_IGNORE, and SSH_MSG_DEBUG are silently consumed
+  // at any point during KEX (per RFC 4253 §11).
+  let safe_read = { () => read_packet_skip_extensions(read_packet) }
   write_packet(self.i_c)
   self.transition_to(SentKexinit)
-  let server_kexinit = read_packet()
+  let server_kexinit = safe_read()
   self.i_s = server_kexinit
   let i_s_len = server_kexinit.length()
   println("DEBUG i_s after read len=\{i_s_len}")
@@ -564,13 +568,54 @@ pub fn KexContext::drive(
     "compression",
     server.first_comp(compression_algorithms()),
   )
+  println(
+    "DEBUG negotiated kex=\{self.kex_alg} host_key=\{self.host_key_alg} enc=\{self.enc_alg} mac=\{self.mac_alg}",
+  )
   if is_curve25519_algorithm(self.kex_alg) {
-    self.drive_curve25519(read_packet, write_packet, accept_host_key)
+    self.drive_curve25519(safe_read, write_packet, accept_host_key)
   } else {
     raise ProtocolError(
       "kex: unsupported key exchange algorithm \{self.kex_alg}",
     )
   }
+}
+
+///|
+/// Known SSH transport-layer message numbers (RFC 4253 / RFC 8308).
+pub const SSH_MSG_DISCONNECT : Byte = b'\x01'
+pub const SSH_MSG_IGNORE : Byte = b'\x02'
+pub const SSH_MSG_DEBUG : Byte = b'\x04'
+pub const SSH_MSG_EXT_INFO : Byte = b'\x07'
+
+///|
+/// Wrap a raw packet reader to silently consume SSH extension/ignore/debug
+/// messages (RFC 4253 §11, RFC 8308) and return only the real payload.
+/// This handles servers that interleave SSH_MSG_EXT_INFO (7),
+/// SSH_MSG_IGNORE (2), or SSH_MSG_DEBUG (4) at any point during KEX.
+fn read_packet_skip_extensions(
+  raw_read : () -> Bytes raise SshError,
+) -> Bytes raise SshError {
+  while true {
+    let pkt = raw_read()
+    if pkt.length() == 0 {
+      raise ProtocolError("read_packet: empty packet")
+    }
+    let msg_type = pkt.unsafe_get(0).to_int()
+    match msg_type {
+      // Extension/info messages — consume and continue
+      2 | 4 | 7 => {
+        println(
+          "DEBUG skipping msg=\{msg_type} len=\{pkt.length()}",
+        )
+      }
+      // Disconnect — propagate as error
+      1 =>
+        raise ProtocolError("kex: server sent SSH_MSG_DISCONNECT")
+      // All other messages — return to caller as-is
+      _ => return pkt
+    }
+  }
+  abort("unreachable: read_packet_skip_extensions")
 }
 
 ///|
@@ -647,7 +692,22 @@ fn KexContext::drive_curve25519(
   }
 
   self.ephemeral = Some(ephemeral)
-  write_packet(build_ecdh_init_payload(client_public))
+  let ecdh_payload = build_ecdh_init_payload(client_public)
+  println(
+    "DEBUG ECDH_INIT payload len=\{ecdh_payload.length()} pubkey_len=\{client_public.length()}",
+  )
+  // Print first few bytes of the payload: msg_type + string header + pubkey start
+  if ecdh_payload.length() >= 5 {
+    println(
+      "DEBUG ECDH_INIT bytes[0..4]=\{ecdh_payload.unsafe_get(0).to_int()} \{ecdh_payload.unsafe_get(1).to_int()} \{ecdh_payload.unsafe_get(2).to_int()} \{ecdh_payload.unsafe_get(3).to_int()} \{ecdh_payload.unsafe_get(4).to_int()}",
+    )
+  }
+  // Before sending ECDH_INIT, peek to see if server has sent anything else
+  // (e.g., SSH_MSG_DISCONNECT or SSH_MSG_EXT_INFO early)
+  // Note: we can't真正 peek without non-blocking I/O, so we'll just send and
+  // then handle errors gracefully.
+  write_packet(ecdh_payload)
+  println("DEBUG after write ECDH_INIT, about to read")
   self.transition_to(SentDhInit)
   let raw_reply = read_packet()
   println(
