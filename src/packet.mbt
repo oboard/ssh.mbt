@@ -228,9 +228,7 @@ pub fn read_packet(
 ) -> Bytes raise SshError {
   let len_bytes = read_exact(4)
   let packet_length = decode_uint32(len_bytes)
-  println(
-    "* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}",
-  )
+  println("* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}")
   if packet_length < 1 || packet_length > MAX_PACKET {
     raise ProtocolError("read_packet: bad length \{packet_length}")
   }
@@ -435,7 +433,7 @@ pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
   let remaining = bytes.length() - start
   let first_nonzero = arr.unsafe_get(start).to_int()
   let body = if start > 0 {
-    match Bytes::get_view(bytes, start=start, end=bytes.length()) {
+    match Bytes::get_view(bytes, start~, end=bytes.length()) {
       Some(v) => BytesView::to_owned(v)
       None => encode_string(b"\x00")
     }
