@@ -29,10 +29,11 @@ pub fn CipherAlgorithm::iv_len(self : CipherAlgorithm) -> Int {
 
 ///|
 pub fn CipherAlgorithm::block_len(self : CipherAlgorithm) -> Int {
-  // RFC 4344 says block_size for CTR should be the cipher block size (16).
-  // However, OpenSSH has used 8 since 2008 for backward compatibility.
-  // Match OpenSSH behavior to ensure padding aligns with server expectations.
-  8
+  // RFC 4253 §6: packet size MUST be a multiple of the cipher block size
+  // or 8, whichever is larger. For AES-128-CTR, the cipher block size is 16.
+  // Using 8 causes packets like CHANNEL_OPEN (40 bytes) to not be a multiple
+  // of 16, which violates the RFC and causes OpenSSH 10.2+ to reject them.
+  16
 }
 
 ///|

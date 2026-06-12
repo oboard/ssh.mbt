@@ -228,14 +228,12 @@ pub fn read_packet(
 ) -> Bytes raise SshError {
   let len_bytes = read_exact(4)
   let packet_length = decode_uint32(len_bytes)
-  println(
-    "* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}",
-  )
+  debug("* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}")
   if packet_length < 1 || packet_length > MAX_PACKET {
     raise ProtocolError("read_packet: bad length \{packet_length}")
   }
   let total = packet_length + mac_size
-  println("* read_packet: reading \{total} more bytes")
+  debug("* read_packet: reading \{total} more bytes")
   let raw = read_exact(total)
   let full_packet = len_bytes + raw
   hex_dump("Encr body + HMAC (\{full_packet.length()} bytes)", full_packet)
@@ -267,7 +265,7 @@ pub fn read_packet(
   } else {
     -1
   }
-  println(
+  debug(
     "* read_packet: pad_len=\{padding_length} payload_end=\{payload_end} msg_type=\{msg_type_val}",
   )
   if 1 + padding_length > plaintext.length() {
@@ -320,59 +318,6 @@ fn packet_random_bytes(n : Int) -> Bytes {
 fn packet_random_bytes(n : Int) -> Bytes {
   @crypto.rand_bytes(n) catch {
     _ => Bytes::make(n, b'\x00')
-  }
-}
-
-// ============== Hex dump debugging ==============
-
-///|
-fn hex_nibble_to_string(n : Int) -> String {
-  if n < 10 {
-    (n + 48).unsafe_to_char().to_string()
-  } else {
-    (n - 10 + 97).unsafe_to_char().to_string()
-  }
-}
-
-///|
-/// 以 Wireshark 风格打印字节的 hex dump。
-/// 输出格式：
-///   * label:
-///
-///   00000:  3b 12 1a 82 6e c4 20 bd ff a1 6c 99 a9 f6 5d 9b  ;...n. ...l...].
-pub fn hex_dump(label : String, data : Bytes) -> Unit {
-  println("* \{label}:")
-  let len = data.length()
-  let arr = data.to_fixedarray()
-  let mut i = 0
-  while i < len {
-    let addr_str = hex_nibble_to_string((i >> 16) & 0xf) +
-      hex_nibble_to_string((i >> 12) & 0xf) +
-      hex_nibble_to_string((i >> 8) & 0xf) +
-      hex_nibble_to_string((i >> 4) & 0xf) +
-      hex_nibble_to_string(i & 0xf)
-    let mut hex_part = ""
-    let mut ascii_part = ""
-    for j = 0; j < 16; j = j + 1 {
-      let idx = i + j
-      if idx < len {
-        let b_val = arr.unsafe_get(idx).to_int()
-        hex_part = hex_part +
-          hex_nibble_to_string((b_val >> 4) & 0xf) +
-          hex_nibble_to_string(b_val & 0xf) +
-          " "
-        if b_val >= 0x20 && b_val < 0x7f {
-          ascii_part = ascii_part + b_val.unsafe_to_char().to_string()
-        } else {
-          ascii_part = ascii_part + "."
-        }
-      } else {
-        hex_part = hex_part + "   "
-        ascii_part = ascii_part + " "
-      }
-    }
-    println(addr_str + ":  " + hex_part + " " + ascii_part)
-    i = i + 16
   }
 }
 
@@ -435,7 +380,7 @@ pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
   let remaining = bytes.length() - start
   let first_nonzero = arr.unsafe_get(start).to_int()
   let body = if start > 0 {
-    match Bytes::get_view(bytes, start=start, end=bytes.length()) {
+    match Bytes::get_view(bytes, start~, end=bytes.length()) {
       Some(v) => BytesView::to_owned(v)
       None => encode_string(b"\x00")
     }

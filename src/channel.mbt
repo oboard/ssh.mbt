@@ -302,7 +302,20 @@ pub fn Channel::handle_inbound(
     }
     // SSH_MSG_GLOBAL_REQUEST(80), REQUEST_SUCCESS(81), REQUEST_FAILURE(82)
     // SSH_MSG_IGNORE(2), DEBUG(4), EXT_INFO(7) — skip
-    b'\x50' | b'\x51' | b'\x52' | b'\x02' | b'\x04' | b'\x07' => []
+    b'\x50' => {
+      // SSH_MSG_GLOBAL_REQUEST: 解析 want_reply 字段
+      let req_name = r.read_string_as_str()
+      let want_reply = if !r.eof() { r.read_byte() } else { b'\x00' }
+      debug(
+        "* GLOBAL_REQUEST: '\{req_name}', want_reply=\{want_reply != b'\x00'}",
+      )
+      if want_reply != b'\x00' {
+        [b"\x52"] // SSH_MSG_REQUEST_FAILURE
+      } else {
+        []
+      }
+    }
+    b'\x51' | b'\x52' | b'\x02' | b'\x04' | b'\x07' => []
     _ => raise ProtocolError("channel: unexpected msg \{msg.to_int()}")
   }
 }

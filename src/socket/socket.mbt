@@ -54,6 +54,17 @@ extern "C" fn socket_close(handle : Int) -> Unit = "socket_close"
 extern "C" fn socket_set_nodelay(handle : Int) -> Int = "socket_set_nodelay"
 
 ///|
+/// Set the global debug flag for C-level debug output (socket/openssl).
+/// This controls fprintf(stderr, ...) output in the C FFI layer.
+extern "C" fn moonbit_set_moonssh_debug(val : Int) -> Unit = "moonbit_set_moonssh_debug"
+
+///|
+/// Enable or disable C-level debug output.
+pub fn set_debug(enabled : Bool) -> Unit {
+  moonbit_set_moonssh_debug(if enabled { 1 } else { 0 })
+}
+
+///|
 /// Connect to a remote host
 pub fn Tcp::connect_to_host(host : String, port~ : Int) -> Tcp raise {
   // Initialize Winsock on Windows

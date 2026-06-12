@@ -1,10 +1,16 @@
 ///|
 /// MoonSSH 命令行客户端。
 fn main {
+  // 检查环境变量 MOONBIT_SSH_DEBUG
+  let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
+  if env_debug == "1" || env_debug == "true" {
+    @src.enable_debug()
+  }
+
   let argv = get_argv()
   if argv.length() == 0 {
     println(
-      "usage: moonssh user@host [-p port] [-l user] [--exec CMD] [--password PWD]",
+      "usage: moonssh user@host [-p port] [-l user] [--exec CMD] [--password PWD] [--debug]",
     )
     abort("no arguments")
   }
@@ -21,10 +27,66 @@ fn main {
   }
 
   let ch = client.open_session()
-  let output = client.exec(ch, command) catch {
+  let (stdout, stderr) = client.exec(ch, command) catch {
     e => abort("exec: " + e.to_string())
   }
-  println(output)
+  if stdout.length() > 0 {
+    println(stdout)
+  }
+  if stderr.length() > 0 {
+    println(stderr)
+  }
+}
+
+///|
+/// 简单的命令行参数 tokenizer，支持单引号和双引号。
+/// 例如：`user@host --exec 'uname -a' --password "my pass"`
+/// 解析为：["user@host", "--exec", "uname -a", "--password", "my pass"]
+fn tokenize_args(s : String) -> Array[String] {
+  let arr = s.to_array()
+  let mut i = 0
+  let result : Array[String] = []
+  while i < arr.length() {
+    let c = arr.unsafe_get(i)
+    if c == ' ' || c == '\t' {
+      i = i + 1
+    } else if c == '\'' {
+      // 单引号：读取直到下一个单引号
+      i = i + 1
+      let mut buf = ""
+      while i < arr.length() && arr.unsafe_get(i) != '\'' {
+        buf = buf + arr.unsafe_get(i).to_string()
+        i = i + 1
+      }
+      if i < arr.length() {
+        i = i + 1
+      } // 跳过结束引号
+      result.push(buf)
+    } else if c == '"' {
+      // 双引号：读取直到下一个双引号
+      i = i + 1
+      let mut buf = ""
+      while i < arr.length() && arr.unsafe_get(i) != '"' {
+        buf = buf + arr.unsafe_get(i).to_string()
+        i = i + 1
+      }
+      if i < arr.length() {
+        i = i + 1
+      } // 跳过结束引号
+      result.push(buf)
+    } else {
+      // 普通字符：读取直到空格
+      let mut buf = ""
+      while i < arr.length() &&
+            arr.unsafe_get(i) != ' ' &&
+            arr.unsafe_get(i) != '\t' {
+        buf = buf + arr.unsafe_get(i).to_string()
+        i = i + 1
+      }
+      result.push(buf)
+    }
+  }
+  result
 }
 
 ///|
@@ -33,7 +95,7 @@ fn get_argv() -> Array[String] {
   if s.length() == 0 {
     []
   } else {
-    s.split(" ").map(v => v.to_owned()).collect()
+    tokenize_args(s)
   }
 }
 
@@ -66,6 +128,10 @@ fn parse_args(argv : Array[String]) -> (@src.ConnectOptions, String, String) {
       "--password" if i + 1 < argv.length() => {
         password = argv[i + 1]
         i = i + 2
+      }
+      "--debug" | "-d" => {
+        @src.enable_debug()
+        i = i + 1
       }
       _ => i = i + 1
     }
