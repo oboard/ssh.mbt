@@ -346,7 +346,7 @@ pub fn Client::exec(
   self : Client,
   channel : Channel,
   command : String,
-) -> String raise SshError {
+) -> (String, String) raise SshError {
   // 1. 打开通道
   let open_msg = build_channel_open(channel.id(), 1024 * 1024, 32 * 1024)
   self.write_packet(open_msg)
@@ -394,7 +394,7 @@ pub fn Client::exec(
     }
   }
 
-  channel.take_stdout()
+  (channel.take_stdout(), channel.take_stderr())
 }
 
 ///|
