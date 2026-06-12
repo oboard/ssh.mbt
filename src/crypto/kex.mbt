@@ -1,179 +1,39 @@
-///|
-/// SSH 密钥交换层所需的密钥协商原语。
-///   - X25519 (curve25519-sha256, curve25519-sha256@libssh.org)
-///   - ECDH nistp256 (ecdh-sha2-nistp256)
-///   - DH group14 (diffie-hellman-group14-sha256, 仅作占位)
-///   - HKDF-SHA2-256 / HKDF-SHA2-512 (RFC 5869)
+///
+/// SSH 密钥交换所需的密钥协商原语。
+/// - DH Group14 (diffie-hellman-group14-sha256, diffie-hellman-group14-sha1)
+/// - BIGNUM 工具函数
 
-///|
-#borrow(peer_pub, out, out_len)
-extern "C" fn pkey_derive_ffi(
-  our : Pkey,
-  peer_pub : Bytes,
-  peer_pub_len : Int,
-  out : FixedArray[Byte],
-  out_len : Ref[Int],
-) -> Int = "moonbitlang_ssh_pkey_derive"
+#external
+type Bn
 
-///|
-#borrow(salt, ikm, info, okm)
-extern "C" fn hkdf_ffi(
-  md_alg : Int,
-  salt : Bytes,
-  salt_len : Int,
-  ikm : Bytes,
-  ikm_len : Int,
-  info : Bytes,
-  info_len : Int,
-  okm : FixedArray[Byte],
-  okm_len : Int,
-) -> Int = "moonbitlang_ssh_hkdf"
+extern "C" fn bn_new_ffi() -> Bn = "moonbitlang_ssh_bn_new"
+extern "C" fn bn_free_ffi(bn : Bn) = "moonbitlang_ssh_bn_free"
 
-// --- X25519 ---------------------------------------------------------
+#borrow(buf)
+extern "C" fn bn_bin2bn_ffi(buf : Bytes, len : Int, bn : Bn) -> Int = "moonbitlang_ssh_bn_bin2bn"
 
-///|
-/// Generate a Curve25519 key pair. The 32-byte private scalar is the seed.
-pub fn x25519_generate() -> (PKey, Bytes) raise CryptoError {
-  let pk = PKey::generate(KeyType::X25519)
-  let priv_bytes = pk.raw_private()
-  (pk, priv_bytes)
-}
+#borrow(buf)
+extern "C" fn bn_bn2bin_ffi(bn : Bn, buf : FixedArray[Byte]) -> Int = "moonbitlang_ssh_bn_bn2bin"
 
-///|
-/// Re-create a private key from a 32-byte X25519 secret.
-pub fn x25519_from_private(priv_bytes : Bytes) -> PKey raise CryptoError {
-  PKey::from_raw(KeyType::X25519, priv_bytes)
-}
+#borrow(buf)
+extern "C" fn bn_bn2binpad_ffi(bn : Bn, buf : FixedArray[Byte], len : Int) -> Int = "moonbitlang_ssh_bn_bn2binpad"
 
-///|
-/// Compute the X25519 shared secret (32 bytes) from our private key and the
-/// peer's 32-byte raw public key.
-pub fn x25519_derive(our : PKey, peer_pub : Bytes) -> Bytes raise CryptoError {
-  let out = FixedArray::make(32, b'\x00')
-  let out_len = Ref(32)
-  let rc = pkey_derive_ffi(
-    our.raw_ptr(),
-    peer_pub,
-    peer_pub.length(),
-    out,
-    out_len,
-  )
-  if rc != 1 {
-    raise CryptoError::OperationFailed(
-      "EVP_PKEY_derive (X25519)",
-      err_get_and_clear(),
-    )
-  }
-  let view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
-  Bytes::from_fixedarray(view)
-}
+extern "C" fn bn_num_bytes_ffi(bn : Bn) -> Int = "moonbitlang_ssh_bn_num_bytes"
+extern "C" fn bn_num_bits_ffi(bn : Bn) -> Int = "moonbitlang_ssh_bn_num_bits"
 
-// --- ECDH nistp256 --------------------------------------------------
+#borrow(r, a, p, m)
+extern "C" fn bn_mod_exp_ffi(r : Bn, a : Bn, p : Bn, m : Bn) -> Int = "moonbitlang_ssh_bn_mod_exp"
 
-///|
-/// Generate a nistp256 EC private key.
-pub fn nistp256_generate() -> (PKey, Bytes) raise CryptoError {
-  let pk = PKey::generate(KeyType::EcP256)
-  let priv_bytes = pk.raw_private()
-  (pk, priv_bytes)
-}
+#borrow(rnd, range)
+extern "C" fn bn_rand_range_ffi(rnd : Bn, range : Bn) -> Int = "moonbitlang_ssh_bn_rand_range"
 
-///|
-/// Build a nistp256 private key from a 32-byte scalar.
-pub fn nistp256_from_private(priv_bytes : Bytes) -> PKey raise CryptoError {
-  PKey::from_raw(KeyType::EcP256, priv_bytes)
-}
+#borrow(buf, buf_len)
+extern "C" fn bn_to_mpint_ffi(bn : Bn, buf : FixedArray[Byte], buf_len : Ref[Int]) -> Int = "moonbitlang_ssh_bn_to_mpint"
 
-///|
-/// Compute the nistp256 ECDH shared point's X coordinate (32 bytes) from
-/// our private key and the peer's uncompressed SEC1 public point
-/// (0x04 || X (32) || Y (32)).
-pub fn nistp256_derive(
-  our : PKey,
-  peer_pub_sec1 : Bytes,
-) -> Bytes raise CryptoError {
-  let out = FixedArray::make(32, b'\x00')
-  let out_len = Ref(32)
-  let rc = pkey_derive_ffi(
-    our.raw_ptr(),
-    peer_pub_sec1,
-    peer_pub_sec1.length(),
-    out,
-    out_len,
-  )
-  if rc != 1 {
-    raise CryptoError::OperationFailed(
-      "EVP_PKEY_derive (EC)",
-      err_get_and_clear(),
-    )
-  }
-  let view = FixedArray::makei(out_len.val, i => out.unsafe_get(i))
-  Bytes::from_fixedarray(view)
-}
+// ==================== DH Group14 ====================
 
-// --- HKDF (RFC 5869) ------------------------------------------------
-
-///|
-/// HKDF-SHA-256. `salt` and `info` may be empty (pass `b""`).
-pub fn hkdf_sha256(
-  ikm : Bytes,
-  salt : Bytes,
-  info : Bytes,
-  length : Int,
-) -> Bytes raise CryptoError {
-  ensure_openssl()
-  let out = FixedArray::make(length, b'\x00')
-  let rc = hkdf_ffi(
-    2,
-    salt,
-    salt.length(),
-    ikm,
-    ikm.length(),
-    info,
-    info.length(),
-    out,
-    length,
-  )
-  if rc != 1 {
-    raise CryptoError::OperationFailed("HKDF-SHA256", err_get_and_clear())
-  }
-  Bytes::from_fixedarray(out)
-}
-
-///|
-/// HKDF-SHA-512. `salt` and `info` may be empty.
-pub fn hkdf_sha512(
-  ikm : Bytes,
-  salt : Bytes,
-  info : Bytes,
-  length : Int,
-) -> Bytes raise CryptoError {
-  ensure_openssl()
-  let out = FixedArray::make(length, b'\x00')
-  let rc = hkdf_ffi(
-    4,
-    salt,
-    salt.length(),
-    ikm,
-    ikm.length(),
-    info,
-    info.length(),
-    out,
-    length,
-  )
-  if rc != 1 {
-    raise CryptoError::OperationFailed("HKDF-SHA512", err_get_and_clear())
-  }
-  Bytes::from_fixedarray(out)
-}
-
-// --- DH group14 -----------------------------------------------------
-
-///|
-/// Oakley Group 14 (RFC 3526 §3): 2048-bit MODP group.
-/// Used by `diffie-hellman-group14-sha256` and `diffie-hellman-group14-sha1`.
+///
 pub fn dh_group14_prime() -> @bigint.BigInt {
-  // RFC 3526 §3, the 2048-bit prime in hex.
   @bigint.BigInt::from_string(
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
     "29024E088A67CC74020BBEA63B139B22514A08798E3404DD" +
@@ -190,31 +50,80 @@ pub fn dh_group14_prime() -> @bigint.BigInt {
   )
 }
 
-///|
-/// Oakley Group 14 generator `g = 2`.
-pub fn dh_group14_generator() -> @bigint.BigInt {
-  @bigint.BigInt::from_int(2)
-}
+pub fn dh_group14_generator() -> @bigint.BigInt { @bigint.BigInt::from_int(2) }
 
-///|
-/// Compute `pub = g^x mod p` where `x` is a uniform random 256-byte (2048-bit)
-/// exponent, `g = 2`, `p` is the Oakley Group 14 prime. Returns the public
-/// value as a 256-byte big-endian buffer.
-pub fn dh_group14_keygen(
-  x : @bigint.BigInt,
-) -> (@bigint.BigInt, @bigint.BigInt) raise CryptoError {
+///
+pub fn dh_group14_keygen(x : @bigint.BigInt) -> (@bigint.BigInt, @bigint.BigInt) raise CryptoError {
   let p = dh_group14_prime()
   let g = dh_group14_generator()
   let public_value = g.pow(x, modulus=p)
   (x, public_value)
 }
 
-///|
-/// Compute the shared secret `shared = peer_pub^x mod p`.
-pub fn dh_group14_shared(
-  x : @bigint.BigInt,
-  peer_pub : @bigint.BigInt,
-) -> @bigint.BigInt raise CryptoError {
+///
+pub fn dh_group14_shared(x : @bigint.BigInt, peer_pub : @bigint.BigInt) -> @bigint.BigInt raise CryptoError {
   let p = dh_group14_prime()
   peer_pub.pow(x, modulus=p)
 }
+
+// ==================== BIGNUM helpers ====================
+
+///
+pub fn bn_from_bytes(bytes : Bytes) -> Bn raise CryptoError {
+  ensure_openssl()
+  let bn = bn_new_ffi()
+  if bn_bin2bn_ffi(bytes, bytes.length(), bn) != 1 {
+    bn_free_ffi(bn)
+    raise CryptoError::OperationFailed("BN_bin2bn", err_get_and_clear())
+  }
+  bn
+}
+
+///
+pub fn bn_to_bytes(bn : Bn, size : Int) -> Bytes raise CryptoError {
+  let arr = FixedArray::make(size, b'\x00')
+  let rc = bn_bn2binpad_ffi(bn, arr, size)
+  if rc <= 0 {
+    raise CryptoError::OperationFailed("BN_bn2binpad", err_get_and_clear())
+  }
+  Bytes::from_array(arr)
+}
+
+///
+pub fn bn_to_mpint(bn : Bn) -> Bytes raise CryptoError {
+  let buf = FixedArray::make(512, b'\x00')
+  let buf_len = Ref(512)
+  let rc = bn_to_mpint_ffi(bn, buf, buf_len)
+  if rc != 1 {
+    raise CryptoError::OperationFailed("bn_to_mpint", err_get_and_clear())
+  }
+  let view = FixedArray::makei(buf_len.val, i => buf.unsafe_get(i))
+  Bytes::from_array(view)
+}
+
+pub fn bn_free(bn : Bn) -> Unit { bn_free_ffi(bn) }
+
+///
+pub fn bn_rand_range(range : Bn) -> Bn raise CryptoError {
+  ensure_openssl()
+  let rnd = bn_new_ffi()
+  let rc = bn_rand_range_ffi(rnd, range)
+  if rc != 1 {
+    bn_free_ffi(rnd)
+    raise CryptoError::OperationFailed("BN_rand_range", err_get_and_clear())
+  }
+  rnd
+}
+
+pub fn bn_mod_exp(a : Bn, p : Bn, m : Bn) -> Bn raise CryptoError {
+  let r = bn_new_ffi()
+  let rc = bn_mod_exp_ffi(r, a, p, m)
+  if rc != 1 {
+    bn_free_ffi(r)
+    raise CryptoError::OperationFailed("BN_mod_exp", err_get_and_clear())
+  }
+  r
+}
+
+pub fn bn_num_bytes(bn : Bn) -> Int { bn_num_bytes_ffi(bn) }
+pub fn bn_num_bits(bn : Bn) -> Int { bn_num_bits_ffi(bn) }
