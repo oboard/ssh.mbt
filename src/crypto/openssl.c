@@ -516,6 +516,7 @@ int moonbitlang_ssh_pkey_new_rsa(
   return 0;
 }
 
+void *moonbitlang_ssh_pkey_new(void) { return EVP_PKEY_new(); }
 void moonbitlang_ssh_pkey_free(void *pkey) { if (pkey) EVP_PKEY_free((EVP_PKEY *)pkey); }
 int moonbitlang_ssh_pkey_size(void *pkey) { return EVP_PKEY_get_size((EVP_PKEY *)pkey); }
 int moonbitlang_ssh_i2d_pubkey(void *pkey, unsigned char **buf) {

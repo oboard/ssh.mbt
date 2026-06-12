@@ -1,15 +1,29 @@
-///
+///|
 /// SSH 用户认证协议（RFC 4252）。
 /// 支持：none / password / publickey / keyboard-interactive
-
 pub const SERVICE_USERAUTH : String = "ssh-userauth"
 
-pub fn method_none() -> String { "none" }
-pub fn method_password() -> String { "password" }
-pub fn method_publickey() -> String { "publickey" }
-pub fn method_keyboard_interactive() -> String { "keyboard-interactive" }
+///|
+pub fn method_none() -> String {
+  "none"
+}
 
-///
+///|
+pub fn method_password() -> String {
+  "password"
+}
+
+///|
+pub fn method_publickey() -> String {
+  "publickey"
+}
+
+///|
+pub fn method_keyboard_interactive() -> String {
+  "keyboard-interactive"
+}
+
+///|
 /// 构建 SSH_MSG_SERVICE_REQUEST。
 pub fn build_service_request(service : String) -> Bytes {
   let w = Writer::new()
@@ -18,12 +32,16 @@ pub fn build_service_request(service : String) -> Bytes {
   w.to_bytes()
 }
 
-///
+///|
 /// 构建 SSH_MSG_USERAUTH_REQUEST。
 pub fn build_userauth_request(
-  user : String, service : String, auth_method : String,
-  has_signature? : Bool, pubkey_alg? : String,
-  pubkey_blob? : Bytes, signature? : Bytes,
+  user : String,
+  service : String,
+  auth_method : String,
+  has_signature? : Bool,
+  pubkey_alg? : String,
+  pubkey_blob? : Bytes,
+  signature? : Bytes,
   password? : String,
 ) -> Bytes {
   let w = Writer::new()
@@ -45,7 +63,7 @@ pub fn build_userauth_request(
   w.to_bytes()
 }
 
-///
+///|
 /// 解析认证回复。
 pub fn parse_auth_reply(payload : Bytes) -> AuthReply raise SshError {
   let r = Reader::new(payload)
@@ -68,6 +86,7 @@ pub fn parse_auth_reply(payload : Bytes) -> AuthReply raise SshError {
   }
 }
 
+///|
 pub enum AuthReply {
   Success
   Failure(Array[String], Bool)
@@ -75,11 +94,14 @@ pub enum AuthReply {
   ServiceAccept
 } derive(Debug, Eq)
 
-///
+///|
 /// 构建公钥签名输入（RFC 4252 §7）。
 pub fn build_publickey_signature_input(
-  session_id : Bytes, user : String, service : String,
-  pubkey_alg : String, pubkey_blob : Bytes,
+  session_id : Bytes,
+  user : String,
+  service : String,
+  pubkey_alg : String,
+  pubkey_blob : Bytes,
 ) -> Bytes {
   let w = Writer::new()
   w.write_string(session_id)
@@ -93,7 +115,7 @@ pub fn build_publickey_signature_input(
   w.to_bytes()
 }
 
-///
+///|
 /// 认证上下文。
 pub struct AuthContext {
   user : String
@@ -101,6 +123,7 @@ pub struct AuthContext {
   mut state : AuthState
 }
 
+///|
 pub enum AuthState {
   Idle
   AwaitingReply
@@ -109,45 +132,87 @@ pub enum AuthState {
   Rejected(Array[String])
 } derive(Eq, Debug)
 
+///|
 pub fn AuthContext::new(user : String) -> AuthContext {
   { user, service: SERVICE_USERAUTH, state: Idle }
 }
 
+///|
 pub fn AuthContext::is_authenticated(self : AuthContext) -> Bool {
   self.state is Authenticated
 }
 
 // 构建各种认证请求
+
+///|
 pub fn AuthContext::build_initial(self : AuthContext) -> Bytes {
   build_userauth_request(self.user, "ssh-connection", method_none())
 }
 
-pub fn AuthContext::build_password(self : AuthContext, password : String) -> Bytes {
-  build_userauth_request(self.user, "ssh-connection", method_password(), password~)
+///|
+pub fn AuthContext::build_password(
+  self : AuthContext,
+  password : String,
+) -> Bytes {
+  build_userauth_request(
+    self.user,
+    "ssh-connection",
+    method_password(),
+    password~,
+  )
 }
 
-pub fn AuthContext::build_publickey_query(self : AuthContext, pubkey_alg : String, pubkey_blob : Bytes) -> Bytes {
-  build_userauth_request(self.user, "ssh-connection", method_publickey(),
-    has_signature=false, pubkey_alg~, pubkey_blob~)
+///|
+pub fn AuthContext::build_publickey_query(
+  self : AuthContext,
+  pubkey_alg : String,
+  pubkey_blob : Bytes,
+) -> Bytes {
+  build_userauth_request(
+    self.user,
+    "ssh-connection",
+    method_publickey(),
+    has_signature=false,
+    pubkey_alg~,
+    pubkey_blob~,
+  )
 }
 
-pub fn AuthContext::build_publickey_sign(self : AuthContext, pubkey_alg : String, pubkey_blob : Bytes, signature : Bytes) -> Bytes {
-  build_userauth_request(self.user, "ssh-connection", method_publickey(),
-    has_signature=true, pubkey_alg~, pubkey_blob~, signature~)
+///|
+pub fn AuthContext::build_publickey_sign(
+  self : AuthContext,
+  pubkey_alg : String,
+  pubkey_blob : Bytes,
+  signature : Bytes,
+) -> Bytes {
+  build_userauth_request(
+    self.user,
+    "ssh-connection",
+    method_publickey(),
+    has_signature=true,
+    pubkey_alg~,
+    pubkey_blob~,
+    signature~,
+  )
 }
 
+///|
 pub fn AuthContext::build_keyboard_interactive(self : AuthContext) -> Bytes {
   let w = Writer::new()
   w.write_byte(50)
   w.write_string_from_str(self.user)
   w.write_string_from_str("ssh-connection")
   w.write_string_from_str(method_keyboard_interactive())
-  w.write_string_from_str("")    // lang
-  w.write_string_from_str("")    // submethods
+  w.write_string_from_str("") // lang
+  w.write_string_from_str("") // submethods
   w.to_bytes()
 }
 
-pub fn AuthContext::build_info_response(self : AuthContext, responses : Array[String]) -> Bytes {
+///|
+pub fn AuthContext::build_info_response(
+  self : AuthContext,
+  responses : Array[String],
+) -> Bytes {
   let w = Writer::new()
   w.write_byte(61) // SSH_MSG_USERAUTH_INFO_RESPONSE
   w.write_uint32(responses.length())
@@ -157,7 +222,7 @@ pub fn AuthContext::build_info_response(self : AuthContext, responses : Array[St
   w.to_bytes()
 }
 
-///
+///|
 /// 更新认证状态。
 pub fn AuthContext::apply_reply(self : AuthContext, reply : AuthReply) -> Unit {
   match reply {

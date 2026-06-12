@@ -1,23 +1,44 @@
-///
+///|
 /// SSH 连接通道协议（RFC 4254）。
 /// 实现：open session / exec / shell / pty / close
 
 // ============== Message types ==============
 
 pub const MSG_CHANNEL_OPEN : Byte = b'\x5a' // 90
+
+///|
 pub const MSG_CHANNEL_OPEN_CONFIRMATION : Byte = b'\x5b' // 91
+
+///|
 pub const MSG_CHANNEL_OPEN_FAILURE : Byte = b'\x5c' // 92
+
+///|
 pub const MSG_CHANNEL_WINDOW_ADJUST : Byte = b'\x5d' // 93
+
+///|
 pub const MSG_CHANNEL_DATA : Byte = b'\x5e' // 94
+
+///|
 pub const MSG_CHANNEL_EXTENDED_DATA : Byte = b'\x7f' // 127
+
+///|
 pub const MSG_CHANNEL_EOF : Byte = b'\x5f' // 95
+
+///|
 pub const MSG_CHANNEL_CLOSE : Byte = b'\x60' // 96
+
+///|
 pub const MSG_CHANNEL_REQUEST : Byte = b'\x62' // 98
+
+///|
 pub const MSG_CHANNEL_SUCCESS : Byte = b'\x63' // 99
+
+///|
 pub const MSG_CHANNEL_FAILURE : Byte = b'\x64' // 100
 
 // ============== Channel ==============
 
+///|
 pub struct Channel {
   priv id : Int
   mut peer_id : Int
@@ -32,6 +53,7 @@ pub struct Channel {
   mut exit_signal : String?
 }
 
+///|
 pub enum ChannelState {
   Closed
   Opening
@@ -40,27 +62,58 @@ pub enum ChannelState {
   EofReceived
   Closing
   Done
-} derive(Eq, Show)
+} derive(Eq, Debug)
 
+///|
 pub fn Channel::new(local_id : Int) -> Channel {
   {
-    id: local_id, peer_id: 0,
-    local_window: 1024 * 1024, local_max_packet: 32 * 1024,
-    remote_window: 0, remote_max_packet: 0,
-    state: Closed, stdout_buf: [], stderr_buf: [],
-    exit_status: None, exit_signal: None,
+    id: local_id,
+    peer_id: 0,
+    local_window: 1024 * 1024,
+    local_max_packet: 32 * 1024,
+    remote_window: 0,
+    remote_max_packet: 0,
+    state: Closed,
+    stdout_buf: [],
+    stderr_buf: [],
+    exit_status: None,
+    exit_signal: None,
   }
 }
 
-pub fn Channel::id(self : Channel) -> Int { self.id }
-pub fn Channel::peer_id(self : Channel) -> Int { self.peer_id }
-pub fn Channel::state(self : Channel) -> ChannelState { self.state }
-pub fn Channel::is_open(self : Channel) -> Bool { self.state == Open }
-pub fn Channel::exit_status(self : Channel) -> Int? { self.exit_status }
+///|
+pub fn Channel::id(self : Channel) -> Int {
+  self.id
+}
+
+///|
+pub fn Channel::peer_id(self : Channel) -> Int {
+  self.peer_id
+}
+
+///|
+pub fn Channel::state(self : Channel) -> ChannelState {
+  self.state
+}
+
+///|
+pub fn Channel::is_open(self : Channel) -> Bool {
+  self.state == Open
+}
+
+///|
+pub fn Channel::exit_status(self : Channel) -> Int? {
+  self.exit_status
+}
 
 // ============== Wire format builders ==============
 
-pub fn build_channel_open(sender_channel : Int, initial_window : Int, max_packet : Int) -> Bytes {
+///|
+pub fn build_channel_open(
+  sender_channel : Int,
+  initial_window : Int,
+  max_packet : Int,
+) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_OPEN)
   w.write_string_from_str("session")
@@ -70,7 +123,11 @@ pub fn build_channel_open(sender_channel : Int, initial_window : Int, max_packet
   w.to_bytes()
 }
 
-pub fn build_channel_request_exec(recipient_channel : Int, command : String) -> Bytes {
+///|
+pub fn build_channel_request_exec(
+  recipient_channel : Int,
+  command : String,
+) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_REQUEST)
   w.write_uint32(recipient_channel)
@@ -80,6 +137,7 @@ pub fn build_channel_request_exec(recipient_channel : Int, command : String) -> 
   w.to_bytes()
 }
 
+///|
 pub fn build_channel_request_shell(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_REQUEST)
@@ -89,9 +147,15 @@ pub fn build_channel_request_shell(recipient_channel : Int) -> Bytes {
   w.to_bytes()
 }
 
+///|
 pub fn build_channel_request_pty(
-  recipient_channel : Int, term : String,
-  cols : Int, rows : Int, width : Int, height : Int, modes : Bytes,
+  recipient_channel : Int,
+  term : String,
+  cols : Int,
+  rows : Int,
+  width : Int,
+  height : Int,
+  modes : Bytes,
 ) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_REQUEST)
@@ -107,6 +171,7 @@ pub fn build_channel_request_pty(
   w.to_bytes()
 }
 
+///|
 pub fn build_channel_data(recipient_channel : Int, data : Bytes) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_DATA)
@@ -115,6 +180,7 @@ pub fn build_channel_data(recipient_channel : Int, data : Bytes) -> Bytes {
   w.to_bytes()
 }
 
+///|
 pub fn build_channel_eof(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_EOF)
@@ -122,6 +188,7 @@ pub fn build_channel_eof(recipient_channel : Int) -> Bytes {
   w.to_bytes()
 }
 
+///|
 pub fn build_channel_close(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_CLOSE)
@@ -129,7 +196,11 @@ pub fn build_channel_close(recipient_channel : Int) -> Bytes {
   w.to_bytes()
 }
 
-pub fn build_channel_window_adjust(recipient_channel : Int, bytes_to_add : Int) -> Bytes {
+///|
+pub fn build_channel_window_adjust(
+  recipient_channel : Int,
+  bytes_to_add : Int,
+) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_WINDOW_ADJUST)
   w.write_uint32(recipient_channel)
@@ -139,7 +210,11 @@ pub fn build_channel_window_adjust(recipient_channel : Int, bytes_to_add : Int) 
 
 // ============== Inbound handler ==============
 
-fn handle_channel_request(ch : Channel, r : Reader) -> Array[Bytes] raise SshError {
+///|
+fn handle_channel_request(
+  ch : Channel,
+  r : Reader,
+) -> Array[Bytes] raise SshError {
   let _sender = r.read_uint32()
   let req_type = r.read_string_as_str()
   let _want_reply = r.read_byte()
@@ -161,7 +236,11 @@ fn handle_channel_request(ch : Channel, r : Reader) -> Array[Bytes] raise SshErr
   }
 }
 
-pub fn Channel::handle_inbound(self : Channel, payload : Bytes) -> Array[Bytes] raise SshError {
+///|
+pub fn Channel::handle_inbound(
+  self : Channel,
+  payload : Bytes,
+) -> Array[Bytes] raise SshError {
   let r = Reader::new(payload)
   let msg = r.read_byte()
   match msg {
@@ -191,14 +270,18 @@ pub fn Channel::handle_inbound(self : Channel, payload : Bytes) -> Array[Bytes] 
     MSG_CHANNEL_DATA => {
       let _sender = r.read_uint32()
       let data = r.read_string()
-      for b in data { self.stdout_buf.push(b) }
+      for b in data {
+        self.stdout_buf.push(b)
+      }
       [build_channel_window_adjust(self.peer_id, self.local_max_packet)]
     }
     MSG_CHANNEL_EXTENDED_DATA => {
       let _sender = r.read_uint32()
       let _data_type = r.read_uint32()
       let data = r.read_string()
-      for b in data { self.stderr_buf.push(b) }
+      for b in data {
+        self.stderr_buf.push(b)
+      }
       []
     }
     MSG_CHANNEL_EOF => {
@@ -223,18 +306,21 @@ pub fn Channel::handle_inbound(self : Channel, payload : Bytes) -> Array[Bytes] 
 
 // ============== Helpers ==============
 
+///|
 pub fn Channel::take_stdout(self : Channel) -> String {
   let s = bytes_to_utf8_string(Bytes::from_array(self.stdout_buf))
   self.stdout_buf.clear()
   s
 }
 
+///|
 pub fn Channel::take_stderr(self : Channel) -> String {
   let s = bytes_to_utf8_string(Bytes::from_array(self.stderr_buf))
   self.stderr_buf.clear()
   s
 }
 
+///|
 pub fn Channel::has_stdout(self : Channel) -> Bool {
   self.stdout_buf.length() > 0
 }

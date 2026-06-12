@@ -1,38 +1,57 @@
-///
+///|
 /// SSH 密钥交换所需的密钥协商原语。
 /// - DH Group14 (diffie-hellman-group14-sha256, diffie-hellman-group14-sha1)
 /// - BIGNUM 工具函数
-
 #external
 type Bn
 
+///|
 extern "C" fn bn_new_ffi() -> Bn = "moonbitlang_ssh_bn_new"
+
+///|
 extern "C" fn bn_free_ffi(bn : Bn) = "moonbitlang_ssh_bn_free"
 
+///|
 #borrow(buf)
 extern "C" fn bn_bin2bn_ffi(buf : Bytes, len : Int, bn : Bn) -> Int = "moonbitlang_ssh_bn_bin2bn"
 
+///|
 #borrow(buf)
 extern "C" fn bn_bn2bin_ffi(bn : Bn, buf : FixedArray[Byte]) -> Int = "moonbitlang_ssh_bn_bn2bin"
 
+///|
 #borrow(buf)
-extern "C" fn bn_bn2binpad_ffi(bn : Bn, buf : FixedArray[Byte], len : Int) -> Int = "moonbitlang_ssh_bn_bn2binpad"
+extern "C" fn bn_bn2binpad_ffi(
+  bn : Bn,
+  buf : FixedArray[Byte],
+  len : Int,
+) -> Int = "moonbitlang_ssh_bn_bn2binpad"
 
+///|
 extern "C" fn bn_num_bytes_ffi(bn : Bn) -> Int = "moonbitlang_ssh_bn_num_bytes"
+
+///|
 extern "C" fn bn_num_bits_ffi(bn : Bn) -> Int = "moonbitlang_ssh_bn_num_bits"
 
+///|
 #borrow(r, a, p, m)
 extern "C" fn bn_mod_exp_ffi(r : Bn, a : Bn, p : Bn, m : Bn) -> Int = "moonbitlang_ssh_bn_mod_exp"
 
+///|
 #borrow(rnd, range)
 extern "C" fn bn_rand_range_ffi(rnd : Bn, range : Bn) -> Int = "moonbitlang_ssh_bn_rand_range"
 
+///|
 #borrow(buf, buf_len)
-extern "C" fn bn_to_mpint_ffi(bn : Bn, buf : FixedArray[Byte], buf_len : Ref[Int]) -> Int = "moonbitlang_ssh_bn_to_mpint"
+extern "C" fn bn_to_mpint_ffi(
+  bn : Bn,
+  buf : FixedArray[Byte],
+  buf_len : Ref[Int],
+) -> Int = "moonbitlang_ssh_bn_to_mpint"
 
 // ==================== DH Group14 ====================
 
-///
+///|
 pub fn dh_group14_prime() -> @bigint.BigInt {
   @bigint.BigInt::from_string(
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
@@ -50,25 +69,33 @@ pub fn dh_group14_prime() -> @bigint.BigInt {
   )
 }
 
-pub fn dh_group14_generator() -> @bigint.BigInt { @bigint.BigInt::from_int(2) }
+///|
+pub fn dh_group14_generator() -> @bigint.BigInt {
+  @bigint.BigInt::from_int(2)
+}
 
-///
-pub fn dh_group14_keygen(x : @bigint.BigInt) -> (@bigint.BigInt, @bigint.BigInt) raise CryptoError {
+///|
+pub fn dh_group14_keygen(
+  x : @bigint.BigInt,
+) -> (@bigint.BigInt, @bigint.BigInt) raise CryptoError {
   let p = dh_group14_prime()
   let g = dh_group14_generator()
   let public_value = g.pow(x, modulus=p)
   (x, public_value)
 }
 
-///
-pub fn dh_group14_shared(x : @bigint.BigInt, peer_pub : @bigint.BigInt) -> @bigint.BigInt raise CryptoError {
+///|
+pub fn dh_group14_shared(
+  x : @bigint.BigInt,
+  peer_pub : @bigint.BigInt,
+) -> @bigint.BigInt raise CryptoError {
   let p = dh_group14_prime()
   peer_pub.pow(x, modulus=p)
 }
 
 // ==================== BIGNUM helpers ====================
 
-///
+///|
 pub fn bn_from_bytes(bytes : Bytes) -> Bn raise CryptoError {
   ensure_openssl()
   let bn = bn_new_ffi()
@@ -79,7 +106,7 @@ pub fn bn_from_bytes(bytes : Bytes) -> Bn raise CryptoError {
   bn
 }
 
-///
+///|
 pub fn bn_to_bytes(bn : Bn, size : Int) -> Bytes raise CryptoError {
   let arr = FixedArray::make(size, b'\x00')
   let rc = bn_bn2binpad_ffi(bn, arr, size)
@@ -89,7 +116,7 @@ pub fn bn_to_bytes(bn : Bn, size : Int) -> Bytes raise CryptoError {
   Bytes::from_array(arr)
 }
 
-///
+///|
 pub fn bn_to_mpint(bn : Bn) -> Bytes raise CryptoError {
   let buf = FixedArray::make(512, b'\x00')
   let buf_len = Ref(512)
@@ -101,9 +128,12 @@ pub fn bn_to_mpint(bn : Bn) -> Bytes raise CryptoError {
   Bytes::from_array(view)
 }
 
-pub fn bn_free(bn : Bn) -> Unit { bn_free_ffi(bn) }
+///|
+pub fn bn_free(bn : Bn) -> Unit {
+  bn_free_ffi(bn)
+}
 
-///
+///|
 pub fn bn_rand_range(range : Bn) -> Bn raise CryptoError {
   ensure_openssl()
   let rnd = bn_new_ffi()
@@ -115,6 +145,7 @@ pub fn bn_rand_range(range : Bn) -> Bn raise CryptoError {
   rnd
 }
 
+///|
 pub fn bn_mod_exp(a : Bn, p : Bn, m : Bn) -> Bn raise CryptoError {
   let r = bn_new_ffi()
   let rc = bn_mod_exp_ffi(r, a, p, m)
@@ -125,5 +156,12 @@ pub fn bn_mod_exp(a : Bn, p : Bn, m : Bn) -> Bn raise CryptoError {
   r
 }
 
-pub fn bn_num_bytes(bn : Bn) -> Int { bn_num_bytes_ffi(bn) }
-pub fn bn_num_bits(bn : Bn) -> Int { bn_num_bits_ffi(bn) }
+///|
+pub fn bn_num_bytes(bn : Bn) -> Int {
+  bn_num_bytes_ffi(bn)
+}
+
+///|
+pub fn bn_num_bits(bn : Bn) -> Int {
+  bn_num_bits_ffi(bn)
+}

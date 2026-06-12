@@ -1,4 +1,4 @@
-///
+///|
 /// 密码学操作中的错误类型。
 pub suberror CryptoError {
   /// 随机数生成失败。
@@ -7,4 +7,4 @@ pub suberror CryptoError {
   OperationFailed(String, String)
   /// 参数无效。
   InvalidArgument(String)
-} derive(Show, Eq)
+} derive(Eq, Show)

@@ -1,0 +1,18 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "PaiGack/ssh_client/src/crypto"
+
+// Values
+
+// Errors
+pub suberror CryptoError {
+  RandomFailed(String)
+  OperationFailed(String, String)
+  InvalidArgument(String)
+} derive(Eq, Show)
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

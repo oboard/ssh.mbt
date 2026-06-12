@@ -2,7 +2,7 @@
 /// SSH 传输层包读写（RFC 4253 §6）。
 /// 包含 Reader / Writer 以及包帧化函数。
 
-///
+///|
 /// SSH 协议层错误。
 pub suberror SshError {
   IoError(String)
@@ -18,27 +18,41 @@ pub suberror SshError {
 
 // ============== Reader ==============
 
-///
+///|
 /// 字节游标读取器。
 pub struct Reader {
   priv data : Bytes
   priv mut pos : Int
 }
 
-pub fn Reader::new(data : Bytes) -> Reader { { data, pos: 0 } }
+///|
+pub fn Reader::new(data : Bytes) -> Reader {
+  { data, pos: 0 }
+}
 
-pub fn Reader::remaining(self : Reader) -> Int { self.data.length() - self.pos }
+///|
+pub fn Reader::remaining(self : Reader) -> Int {
+  self.data.length() - self.pos
+}
 
-pub fn Reader::pos(self : Reader) -> Int { self.pos }
+///|
+pub fn Reader::pos(self : Reader) -> Int {
+  self.pos
+}
 
-pub fn Reader::eof(self : Reader) -> Bool { self.pos >= self.data.length() }
+///|
+pub fn Reader::eof(self : Reader) -> Bool {
+  self.pos >= self.data.length()
+}
 
+///|
 fn Reader::require(self : Reader, n : Int) -> Unit raise SshError {
   if self.remaining() < n {
     raise ParseError("reader: need \{n} bytes, have \{self.remaining()}")
   }
 }
 
+///|
 pub fn Reader::read_byte(self : Reader) -> Byte raise SshError {
   self.require(1)
   let b = self.data.unsafe_get(self.pos)
@@ -46,6 +60,7 @@ pub fn Reader::read_byte(self : Reader) -> Byte raise SshError {
   b
 }
 
+///|
 pub fn Reader::read_uint32(self : Reader) -> Int raise SshError {
   self.require(4)
   let v0 = self.data.unsafe_get(self.pos).to_uint()
@@ -56,9 +71,11 @@ pub fn Reader::read_uint32(self : Reader) -> Int raise SshError {
   ((v0 << 24) | (v1 << 16) | (v2 << 8) | v3).reinterpret_as_int()
 }
 
+///|
 pub fn Reader::read_bytes(self : Reader, n : Int) -> Bytes raise SshError {
   self.require(n)
-  let view = match Bytes::get_view(self.data, start=self.pos, end=self.pos + n) {
+  let view = match
+    Bytes::get_view(self.data, start=self.pos, end=self.pos + n) {
     Some(v) => BytesView::to_owned(v)
     None => raise ParseError("reader: view out of range")
   }
@@ -66,26 +83,34 @@ pub fn Reader::read_bytes(self : Reader, n : Int) -> Bytes raise SshError {
   view
 }
 
+///|
 pub fn Reader::read_string(self : Reader) -> Bytes raise SshError {
   let len = self.read_uint32()
   self.read_bytes(len)
 }
 
+///|
 pub fn Reader::read_string_as_str(self : Reader) -> String raise SshError {
   bytes_to_utf8_string(self.read_string())
 }
 
+///|
 pub fn Reader::read_name_list(self : Reader) -> Array[String] raise SshError {
   let s = self.read_string_as_str()
-  if s.length() == 0 { return [] }
+  if s.length() == 0 {
+    return []
+  }
   let out : Array[String] = []
   for view in s.split(",") {
     let name = view.to_string()
-    if name.length() > 0 { out.push(name) }
+    if name.length() > 0 {
+      out.push(name)
+    }
   }
   out
 }
 
+///|
 pub fn Reader::read_mpint(self : Reader) -> @bigint.BigInt raise SshError {
   let bytes_val = self.read_string()
   if bytes_val.length() == 0 {
@@ -96,6 +121,7 @@ pub fn Reader::read_mpint(self : Reader) -> @bigint.BigInt raise SshError {
   }
 }
 
+///|
 pub fn Reader::rest(self : Reader) -> Bytes {
   match Bytes::get_view(self.data, start=self.pos, end=self.data.length()) {
     Some(v) => BytesView::to_owned(v)
@@ -105,20 +131,34 @@ pub fn Reader::rest(self : Reader) -> Bytes {
 
 // ============== Writer ==============
 
+///|
 pub struct Writer {
   priv buf : Array[Byte]
 }
 
-pub fn Writer::new() -> Writer { { buf: [] } }
-
-pub fn Writer::length(self : Writer) -> Int { self.buf.length() }
-
-pub fn Writer::write_byte(self : Writer, b : Byte) -> Unit { self.buf.push(b) }
-
-pub fn Writer::write_bytes(self : Writer, b : Bytes) -> Unit {
-  for byte in b { self.buf.push(byte) }
+///|
+pub fn Writer::new() -> Writer {
+  { buf: [] }
 }
 
+///|
+pub fn Writer::length(self : Writer) -> Int {
+  self.buf.length()
+}
+
+///|
+pub fn Writer::write_byte(self : Writer, b : Byte) -> Unit {
+  self.buf.push(b)
+}
+
+///|
+pub fn Writer::write_bytes(self : Writer, b : Bytes) -> Unit {
+  for byte in b {
+    self.buf.push(byte)
+  }
+}
+
+///|
 pub fn Writer::write_uint32(self : Writer, n : Int) -> Unit {
   let n_u = n.reinterpret_as_uint()
   self.buf.push(((n_u >> 24) & 0xffU).reinterpret_as_int().to_byte())
@@ -127,24 +167,30 @@ pub fn Writer::write_uint32(self : Writer, n : Int) -> Unit {
   self.buf.push((n_u & 0xffU).reinterpret_as_int().to_byte())
 }
 
+///|
 pub fn Writer::write_string(self : Writer, s : Bytes) -> Unit {
   self.write_uint32(s.length())
   self.write_bytes(s)
 }
 
+///|
 pub fn Writer::write_string_from_str(self : Writer, s : String) -> Unit {
   self.write_string(@utf8.encode(s))
 }
 
+///|
 pub fn Writer::write_name_list(self : Writer, names : Array[String]) -> Unit {
   let mut s = ""
   for i, name in names {
-    if i > 0 { s = s + "," }
+    if i > 0 {
+      s = s + ","
+    }
     s = s + name
   }
   self.write_string_from_str(s)
 }
 
+///|
 pub fn Writer::write_mpint(self : Writer, n : @bigint.BigInt) -> Unit {
   let bytes = n.to_octets() catch { _ => b"" }
   if bytes.length() == 0 {
@@ -161,15 +207,17 @@ pub fn Writer::write_mpint(self : Writer, n : @bigint.BigInt) -> Unit {
   }
 }
 
+///|
 pub fn Writer::to_bytes(self : Writer) -> Bytes {
   Bytes::from_array(self.buf)
 }
 
 // ============== Packet I/O ==============
 
+///|
 pub const MAX_PACKET : Int = 256 * 1024
 
-///
+///|
 /// 读取一个 SSH 包。
 pub fn read_packet(
   read_exact : (Int) -> Bytes raise SshError,
@@ -194,8 +242,12 @@ pub fn read_packet(
       Some(v) => BytesView::to_owned(v)
       None => raise ProtocolError("read_packet: mac slice")
     }
-  } else { b"" }
-  if mac_size > 0 { verify_mac(len_bytes + body, mac) }
+  } else {
+    b""
+  }
+  if mac_size > 0 {
+    verify_mac(len_bytes + body, mac)
+  }
   let plaintext = decrypt(body)
   if plaintext.length() < 1 {
     raise ProtocolError("read_packet: empty plaintext")
@@ -205,13 +257,14 @@ pub fn read_packet(
     raise ProtocolError("read_packet: padding_length too large")
   }
   let payload_len = plaintext.length() - 1 - padding_length
-  match Bytes::get_view(plaintext, start=1, end=plaintext.length() - padding_length) {
+  match
+    Bytes::get_view(plaintext, start=1, end=plaintext.length() - padding_length) {
     Some(v) => BytesView::to_owned(v)
     None => raise ProtocolError("read_packet: payload slice")
   }
 }
 
-///
+///|
 /// 序列化一个 SSH 包。
 pub fn write_packet(
   payload : Bytes,
@@ -227,7 +280,9 @@ pub fn write_packet(
     padding_length = padding_length + 1
   }
   let padding = packet_random_bytes(padding_length)
-  let body = Bytes::from_array(FixedArray::make(1, padding_length.to_byte())) + payload + padding
+  let body = Bytes::from_array(FixedArray::make(1, padding_length.to_byte())) +
+    payload +
+    padding
   let len_bytes = encode_uint32(body.length())
   let mut packet = len_bytes + body
   if mac_enabled {
@@ -237,20 +292,33 @@ pub fn write_packet(
   packet
 }
 
+///|
 #cfg(platform="windows")
-fn packet_random_bytes(n : Int) -> Bytes { Bytes::make(n, b'\x00') }
+fn packet_random_bytes(n : Int) -> Bytes {
+  Bytes::make(n, b'\x00')
+}
 
+///|
 #cfg(not(platform="windows"))
 fn packet_random_bytes(n : Int) -> Bytes {
-  @crypto.rand_bytes(n) catch { _ => Bytes::make(n, b'\x00') }
+  @crypto.rand_bytes(n) catch {
+    _ => Bytes::make(n, b'\x00')
+  }
 }
 
 // ============== Low-level helpers ==============
 
-pub fn encode_string(s : Bytes) -> Bytes { encode_uint32(s.length()) + s }
+///|
+pub fn encode_string(s : Bytes) -> Bytes {
+  encode_uint32(s.length()) + s
+}
 
-pub fn encode_string_from_str(s : String) -> Bytes { encode_string(@utf8.encode(s)) }
+///|
+pub fn encode_string_from_str(s : String) -> Bytes {
+  encode_string(@utf8.encode(s))
+}
 
+///|
 pub fn encode_uint32(n : Int) -> Bytes {
   let arr = FixedArray::make(4, b'\x00')
   let n_u = n.reinterpret_as_uint()
@@ -261,6 +329,7 @@ pub fn encode_uint32(n : Int) -> Bytes {
   Bytes::from_array(arr)
 }
 
+///|
 pub fn decode_uint32(buf : Bytes) -> Int {
   let v = buf.to_fixedarray()
   let b0 = v.unsafe_get(0).to_uint()
@@ -270,17 +339,23 @@ pub fn decode_uint32(buf : Bytes) -> Int {
   ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3).reinterpret_as_int()
 }
 
+///|
 pub fn encode_mpint(n : @bigint.BigInt) -> Bytes {
   let w = Writer::new()
   w.write_mpint(n)
   w.to_bytes()
 }
 
+///|
 pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
-  if bytes.length() == 0 { return encode_string(b"\x00") }
+  if bytes.length() == 0 {
+    return encode_string(b"\x00")
+  }
   let first = bytes.unsafe_get(0).to_int()
   if first >= 0x80 {
-    encode_uint32(bytes.length() + 1) + Bytes::from_array(FixedArray::make(1, b'\x00')) + bytes
+    encode_uint32(bytes.length() + 1) +
+    Bytes::from_array(FixedArray::make(1, b'\x00')) +
+    bytes
   } else {
     encode_string(bytes)
   }
@@ -288,6 +363,7 @@ pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
 
 // ============== UTF-8 helper ==============
 
+///|
 fn bytes_to_utf8_string(b : Bytes) -> String {
   let mut s = ""
   let arr = b.to_fixedarray()
@@ -300,23 +376,35 @@ fn bytes_to_utf8_string(b : Bytes) -> String {
   s
 }
 
+///|
 fn decode_utf8_char(arr : FixedArray[Byte], i : Int) -> (Char, Int) {
   let b0 = arr.unsafe_get(i).to_int()
-  if b0 < 0x80 { (b0.unsafe_to_char(), 1) }
-  else if b0 < 0xC0 { (0xFFFD |> unsafe_int_to_char, 1) }
-  else if b0 < 0xE0 {
+  if b0 < 0x80 {
+    (b0.unsafe_to_char(), 1)
+  } else if b0 < 0xC0 {
+    (0xFFFD |> unsafe_int_to_char, 1)
+  } else if b0 < 0xE0 {
     if i + 1 < arr.length() {
       let b1 = arr.unsafe_get(i + 1).to_int() & 0x3F
       ((((b0 & 0x1F) << 6) | b1).unsafe_to_char(), 2)
-    } else { (0xFFFD |> unsafe_int_to_char, 1) }
+    } else {
+      (0xFFFD |> unsafe_int_to_char, 1)
+    }
   } else if b0 < 0xF0 {
     if i + 2 < arr.length() {
       let b1 = arr.unsafe_get(i + 1).to_int() & 0x3F
       let b2 = arr.unsafe_get(i + 2).to_int() & 0x3F
       let cp = ((b0 & 0x0F) << 12) | (b1 << 6) | b2
       (cp.unsafe_to_char(), 3)
-    } else { (0xFFFD |> unsafe_int_to_char, 1) }
-  } else { (0xFFFD |> unsafe_int_to_char, 1) }
+    } else {
+      (0xFFFD |> unsafe_int_to_char, 1)
+    }
+  } else {
+    (0xFFFD |> unsafe_int_to_char, 1)
+  }
 }
 
-fn unsafe_int_to_char(n : Int) -> Char { n.unsafe_to_char() }
+///|
+fn unsafe_int_to_char(n : Int) -> Char {
+  n.unsafe_to_char()
+}
