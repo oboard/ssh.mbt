@@ -1,0 +1,8 @@
+import {
+  "moonbitlang/core/env",
+}
+
+options(
+  is_main: true,
+  supported_targets: "+native",
+)
