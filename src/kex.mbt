@@ -512,10 +512,10 @@ pub fn KexContext::drive(
   let server_kexinit = safe_read()
   self.i_s = server_kexinit
   let server = parse_kexinit(server_kexinit)
-  println("Server KEX algorithms: \{server.kex_algs}")
-  println("Server host key algs: \{server.host_key_algs}")
-  println("Server enc algorithms: \{server.enc_s2c}")
-  println("Server mac algorithms: \{server.mac_s2c}")
+  debug("Server KEX algorithms: \{server.kex_algs}")
+  debug("Server host key algs: \{server.host_key_algs}")
+  debug("Server enc algorithms: \{server.enc_s2c}")
+  debug("Server mac algorithms: \{server.mac_s2c}")
   self.state = Negotiating
 
   // 3. 协商算法
@@ -523,12 +523,12 @@ pub fn KexContext::drive(
     Some(a) => a
     None => raise ProtocolError("kex: no matching kex algorithm")
   }
-  println("Negotiated kex_alg: \{self.kex_alg}")
+  debug("Negotiated kex_alg: \{self.kex_alg}")
   self.host_key_alg = match server.first_host_key() {
     Some(a) => a
     None => raise ProtocolError("kex: no matching host key algorithm")
   }
-  println("Negotiated host_key_alg: \{self.host_key_alg}")
+  debug("Negotiated host_key_alg: \{self.host_key_alg}")
   self.enc_alg = match server.first_enc() {
     Some(a) => a
     None => raise ProtocolError("kex: no matching encryption algorithm")
@@ -541,7 +541,7 @@ pub fn KexContext::drive(
     Some(a) => a
     None => raise ProtocolError("kex: no matching compression algorithm")
   }
-  println("Negotiated enc: \{self.enc_alg} mac: \{self.mac_alg}")
+  debug("Negotiated enc: \{self.enc_alg} mac: \{self.mac_alg}")
 
   // 4. 根据协商的 KEX 算法执行交换
   if is_ecdh_alg(self.kex_alg) {
@@ -568,16 +568,16 @@ fn KexContext::drive_ecdh(
 
   // b. 发送 ECDH_INIT(Q_C)
   let ecdh_payload = build_ecdh_init_payload(client_pub_bytes)
-  println(
+  debug(
     "drive_ecdh: sending ECDH_INIT payload of length=\{ecdh_payload.length()}",
   )
   write_packet(ecdh_payload)
   self.state = SentDhInit
 
   // c. 接收 ECDH_REPLY
-  println("drive_ecdh: about to read ECDH_REPLY...")
+  debug("drive_ecdh: about to read ECDH_REPLY...")
   let raw_reply = read_packet()
-  println(
+  debug(
     "drive_ecdh: got ECDH_REPLY, length=\{raw_reply.length()}, msg_type=\{raw_reply.unsafe_get(0).to_int()}",
   )
   let reply = parse_ecdh_reply_payload(raw_reply)

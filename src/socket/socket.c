@@ -9,6 +9,15 @@
 #include <string.h>
 #include <moonbit.h>
 
+/* Global debug flag controlled by MoonBit layer */
+int moonssh_debug = 0;
+
+/* FFI: called from MoonBit to set debug flag */
+MOONBIT_FFI_EXPORT
+void moonbit_set_moonssh_debug(int32_t val) {
+    moonssh_debug = val;
+}
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -335,20 +344,22 @@ int socket_send(int handle, moonbit_string_t data_str) {
 
 int socket_send_bytes(int handle, moonbit_bytes_t data, int data_len) {
     const char *buffer = (const char *)data;
-    fprintf(stderr, "socket_send_bytes: sending %d bytes on fd=%d\n", data_len, handle);
-    // Print first 16 bytes of payload for debugging
-    if (data_len > 0 && data_len <= 64) {
-        fprintf(stderr, "socket_send_bytes: data dump:");
-        for (int i = 0; i < data_len; i++) {
-            fprintf(stderr, " %02x", (unsigned char)buffer[i]);
+    if (moonssh_debug) {
+        fprintf(stderr, "socket_send_bytes: sending %d bytes on fd=%d\n", data_len, handle);
+        // Print first 16 bytes of payload for debugging
+        if (data_len > 0 && data_len <= 64) {
+            fprintf(stderr, "socket_send_bytes: data dump:");
+            for (int i = 0; i < data_len; i++) {
+                fprintf(stderr, " %02x", (unsigned char)buffer[i]);
+            }
+            fprintf(stderr, "\n");
+        } else if (data_len > 64) {
+            fprintf(stderr, "socket_send_bytes: data dump (first 32):");
+            for (int i = 0; i < 32; i++) {
+                fprintf(stderr, " %02x", (unsigned char)buffer[i]);
+            }
+            fprintf(stderr, " ...\n");
         }
-        fprintf(stderr, "\n");
-    } else if (data_len > 64) {
-        fprintf(stderr, "socket_send_bytes: data dump (first 32):");
-        for (int i = 0; i < 32; i++) {
-            fprintf(stderr, " %02x", (unsigned char)buffer[i]);
-        }
-        fprintf(stderr, " ...\n");
     }
     return send_all(handle, buffer, data_len);
 }
@@ -358,18 +369,20 @@ int socket_recv(int handle, moonbit_bytes_t buffer, int offset, int size) {
     int result = (int)recv(handle, (char *)(buf_ptr + offset), (size_t)size, 0);
     if (result == 0) {
         /* Connection closed gracefully by peer */
-        fprintf(stderr, "socket_recv: connection closed (fd=%d)\n", handle);
+        if (moonssh_debug) fprintf(stderr, "socket_recv: connection closed (fd=%d)\n", handle);
     } else if (result < 0) {
         /* Error occurred */
-        fprintf(stderr, "socket_recv: error %d (errno=%d: %s) on fd=%d\n",
+        if (moonssh_debug) fprintf(stderr, "socket_recv: error %d (errno=%d: %s) on fd=%d\n",
                 result, errno, strerror(errno), handle);
     } else if (result > 0 && result <= 64) {
         /* Dump received data for small reads */
-        fprintf(stderr, "socket_recv: got %d bytes on fd=%d: ", result, handle);
-        for (int i = 0; i < result; i++) {
-            fprintf(stderr, "%02x ", (unsigned char)(buf_ptr[offset + i]));
+        if (moonssh_debug) {
+            fprintf(stderr, "socket_recv: got %d bytes on fd=%d: ", result, handle);
+            for (int i = 0; i < result; i++) {
+                fprintf(stderr, "%02x ", (unsigned char)(buf_ptr[offset + i]));
+            }
+            fprintf(stderr, "\n");
         }
-        fprintf(stderr, "\n");
     }
     return result;
 }

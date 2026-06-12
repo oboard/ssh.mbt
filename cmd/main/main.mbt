@@ -1,10 +1,16 @@
 ///|
 /// MoonSSH 命令行客户端。
 fn main {
+  // 检查环境变量 MOONBIT_SSH_DEBUG
+  let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
+  if env_debug == "1" || env_debug == "true" {
+    @src.enable_debug()
+  }
+
   let argv = get_argv()
   if argv.length() == 0 {
     println(
-      "usage: moonssh user@host [-p port] [-l user] [--exec CMD] [--password PWD]",
+      "usage: moonssh user@host [-p port] [-l user] [--exec CMD] [--password PWD] [--debug]",
     )
     abort("no arguments")
   }
@@ -66,6 +72,10 @@ fn parse_args(argv : Array[String]) -> (@src.ConnectOptions, String, String) {
       "--password" if i + 1 < argv.length() => {
         password = argv[i + 1]
         i = i + 2
+      }
+      "--debug" | "-d" => {
+        @src.enable_debug()
+        i = i + 1
       }
       _ => i = i + 1
     }

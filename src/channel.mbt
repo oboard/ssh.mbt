@@ -306,7 +306,7 @@ pub fn Channel::handle_inbound(
       // SSH_MSG_GLOBAL_REQUEST: 解析 want_reply 字段
       let req_name = r.read_string_as_str()
       let want_reply = if !r.eof() { r.read_byte() } else { b'\x00' }
-      println(
+      debug(
         "* GLOBAL_REQUEST: '\{req_name}', want_reply=\{want_reply != b'\x00'}",
       )
       if want_reply != b'\x00' {

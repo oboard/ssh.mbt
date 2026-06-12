@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <moonbit.h>
 
+/* Global debug flag controlled by MoonBit layer (defined in socket.c) */
+extern int moonssh_debug;
+
 /* Opaque forward declarations */
 typedef struct evp_md_ctx_st  EVP_MD_CTX;
 typedef struct evp_md_st      EVP_MD;
@@ -271,23 +274,27 @@ int moonbitlang_ssh_hmac(
   if (!md) return 0;
 
   /* Debug: dump HMAC key and full data */
-  fprintf(stderr, "openssl_hmac: alg=%d key_len=%d data_len=%d\n", alg_id, key_len, data_len);
-  fprintf(stderr, "HMAC_KEY_HEX=");
-  for (int i = 0; i < key_len; i++) fprintf(stderr, "%02x", key[i]);
-  fprintf(stderr, "\nHMAC_DATA_HEX=");
-  for (int i = 0; i < data_len; i++) fprintf(stderr, "%02x", data[i]);
-  fprintf(stderr, "\n");
+  if (moonssh_debug) {
+    fprintf(stderr, "openssl_hmac: alg=%d key_len=%d data_len=%d\n", alg_id, key_len, data_len);
+    fprintf(stderr, "HMAC_KEY_HEX=");
+    for (int i = 0; i < key_len; i++) fprintf(stderr, "%02x", key[i]);
+    fprintf(stderr, "\nHMAC_DATA_HEX=");
+    for (int i = 0; i < data_len; i++) fprintf(stderr, "%02x", data[i]);
+    fprintf(stderr, "\n");
+  }
 
   unsigned int md_len = 0;
   unsigned char *result = HMAC(md, key, key_len, data, (size_t)data_len, out, &md_len);
   if (!result) return 0;
 
   /* Debug: dump full HMAC output */
-  fprintf(stderr, "openssl_hmac: out=");
-  for (int i = 0; i < (int)md_len; i++) {
-    fprintf(stderr, "%02x", out[i]);
+  if (moonssh_debug) {
+    fprintf(stderr, "openssl_hmac: out=");
+    for (int i = 0; i < (int)md_len; i++) {
+      fprintf(stderr, "%02x", out[i]);
+    }
+    fprintf(stderr, " (len=%d)\n", (int)md_len);
   }
-  fprintf(stderr, " (len=%d)\n", (int)md_len);
 
   if (out_len) *out_len = (int)md_len;
   return 1;
