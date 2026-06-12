@@ -74,12 +74,14 @@ extern "C" fn ecdh_derive_ffi(
 ) -> Int = "moonbitlang_ssh_ecdh_derive"
 
 ///|
-#borrow(n, e, out)
+#borrow(n, e, d, out)
 extern "C" fn pkey_new_rsa_ffi(
   n : Bytes,
   n_len : Int,
   e : Bytes,
   e_len : Int,
+  d : Bytes,
+  d_len : Int,
   out : Ref[Pkey],
 ) -> Int = "moonbitlang_ssh_pkey_new_rsa"
 
@@ -128,7 +130,8 @@ pub fn PKey::from_rsa_components(
 ) -> PKey raise CryptoError {
   ensure_openssl()
   let out : Ref[Pkey] = Ref(pkey_new_ffi())
-  let rc = pkey_new_rsa_ffi(n, n.length(), e, e.length(), out)
+  let d = b""
+  let rc = pkey_new_rsa_ffi(n, n.length(), e, e.length(), d, 0, out)
   if rc != 1 {
     pkey_free_ffi(out.val)
     raise CryptoError::OperationFailed("RSA fromdata", err_get_and_clear())

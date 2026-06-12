@@ -90,7 +90,9 @@ pub fn Mac::update(self : Mac, data : Bytes) -> Unit {
 
 ///|
 pub fn Mac::finalize(self : Mac) -> Bytes raise CryptoError {
-  hmac(self.alg, self.key, Bytes::from_array(self.buf))
+  let result = hmac(self.alg, self.key, Bytes::from_array(self.buf))
+  self.buf.clear()
+  result
 }
 
 ///|

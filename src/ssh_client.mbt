@@ -82,7 +82,10 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
   if !banner_bytes.has_prefix(b"SSH-") {
     raise ProtocolError("server banner missing SSH- prefix")
   }
-  let banner_line = banner_bytes.to_string()
+  // 使用 bytes_to_utf8_string 正确解码字节为字符串，
+  // 避免 Bytes::to_string() 返回 Debug 格式 b"..."。
+  let banner_line = bytes_to_utf8_string(banner_bytes)
+  println("server banner: '\{banner_line}'")
   let v_c = @utf8.encode(client_banner)
   let v_s = @utf8.encode(banner_line)
   let kex = KexContext::new(v_c, v_s)

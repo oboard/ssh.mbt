@@ -278,7 +278,7 @@ pub fn write_packet(
   let min_pad = 4
   let payload_len = payload.length()
   let mut padding_length = min_pad
-  while (1 + payload_len + padding_length) % bs != 0 {
+  while (5 + payload_len + padding_length) % bs != 0 {
     padding_length = padding_length + 1
   }
   let padding = packet_random_bytes(padding_length)

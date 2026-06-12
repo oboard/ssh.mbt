@@ -89,6 +89,8 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, EVP_PKEY_sign, (EVP_PKEY_CTX *ctx, unsigned char *sig, size_t *siglen, const unsigned char *tbs, size_t tbslen)) \
   IMPORT_FUNC(int, EVP_PKEY_verify_init, (EVP_PKEY_CTX *ctx)) \
   IMPORT_FUNC(int, EVP_PKEY_verify, (EVP_PKEY_CTX *ctx, const unsigned char *sig, size_t siglen, const unsigned char *tbs, size_t tbslen)) \
+  IMPORT_FUNC(int, EVP_PKEY_verify_recover_init, (EVP_PKEY_CTX *ctx)) \
+  IMPORT_FUNC(int, EVP_PKEY_verify_recover, (EVP_PKEY_CTX *ctx, unsigned char *rout, size_t *routlen, const unsigned char *sig, size_t siglen)) \
   IMPORT_FUNC(int, EVP_PKEY_derive_init, (EVP_PKEY_CTX *ctx)) \
   IMPORT_FUNC(int, EVP_PKEY_derive_set_peer, (EVP_PKEY_CTX *ctx, EVP_PKEY *peer)) \
   IMPORT_FUNC(int, EVP_PKEY_derive, (EVP_PKEY_CTX *ctx, unsigned char *key, size_t *keylen)) \
@@ -388,13 +390,13 @@ static int wrap_raw_point_in_spki(const unsigned char *raw, int raw_len,
                                   unsigned char *out, int out_cap) {
   /* Only P-256 raw points are supported (65 bytes: 04 || x || y) */
   if (raw_len != 65) return 0;
-  if (out_cap < 89) return 0;
+  if (out_cap < 91) return 0;
   const unsigned char spki_prefix[] = {
     0x30, 0x59,                                           /* SEQUENCE (89) */
       0x30, 0x13,                                         /* SEQUENCE (19) */
         0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, /* ecPublicKey */
         0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, /* secp256r1 */
-      0x03, 0x3b,                                         /* BIT STRING (59) */
+      0x03, 0x42,                                         /* BIT STRING (66) */
         0x00                                              /* unused bits */
   };
   memcpy(out, spki_prefix, sizeof(spki_prefix));
@@ -500,16 +502,34 @@ int moonbitlang_ssh_rsa_sign(void *pkey, int md_alg_id,
 int moonbitlang_ssh_rsa_verify(void *pkey, int md_alg_id,
                                const unsigned char *tbs, int tbs_len,
                                const unsigned char *sig, int sig_len) {
+  /* SSH RSASSA-PKCS1-v1_5 signature verification.
+   * The server signs DigestInfo(SHA-256(H)) directly.
+   * We use EVP_PKEY_verify_recover to extract the original DigestInfo,
+   * then compare the recovered hash with SHA-256(tbs). */
+  unsigned char hash_buf[64];
+  unsigned int hash_len = 0;
+  
+  /* Step 1: compute SHA-256(tbs) = SHA-256(exchange_hash) */
+  const EVP_MD *md = md_by_id(md_alg_id);
+  if (!md) return 0;
+  if (!EVP_Digest(tbs, (size_t)tbs_len, hash_buf, &hash_len, md, NULL)) return 0;
+  
+  /* Step 2: recover DigestInfo from signature */
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)pkey, 0);
   if (!ctx) return 0;
+  unsigned char recovered[512];
+  size_t recovered_len = sizeof(recovered);
   int ok = 1;
-  if (EVP_PKEY_verify_init(ctx) <= 0) ok = 0;
-  if (ok && md_alg_id != 0) {
-    if (EVP_PKEY_CTX_set_signature_md(ctx, md_by_id(md_alg_id)) <= 0) ok = 0;
-  }
-  if (ok && EVP_PKEY_verify(ctx, sig, (size_t)sig_len, tbs, (size_t)tbs_len) <= 0) ok = 0;
+  if (EVP_PKEY_verify_recover_init(ctx) <= 0) ok = -1;
+  if (ok == 1 && EVP_PKEY_verify_recover(ctx, recovered, &recovered_len,
+                                         sig, (size_t)sig_len) <= 0) ok = -1;
   EVP_PKEY_CTX_free(ctx);
-  return ok;
+  if (ok < 0) return 0;
+  
+  /* Step 3: extract hash from DigestInfo end and compare */
+  if (recovered_len < (size_t)(hash_len + 8)) return 0;
+  const unsigned char *extracted = recovered + (recovered_len - hash_len);
+  return memcmp(extracted, hash_buf, (size_t)hash_len) == 0 ? 1 : 0;
 }
 
 /* ------------------------------------------------------------------ */
