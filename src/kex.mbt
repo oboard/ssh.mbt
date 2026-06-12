@@ -332,10 +332,10 @@ pub fn KexContext::new(v_c : Bytes, v_s : Bytes) -> KexContext {
   }
 }
 
-#cfg(platform="windows")]
+#cfg(platform="windows")
 fn kex_random_bytes(n : Int) -> Bytes { Bytes::make(n, b'\x00') }
 
-#cfg(not(platform="windows"))]
+#cfg(not(platform="windows"))
 fn kex_random_bytes(n : Int) -> Bytes { @crypto.rand_bytes(n) catch { _ => Bytes::make(n, b'\x00') } }
 
 fn hash_alg_for_kex(alg : String) -> @crypto.Algorithm raise SshError {
@@ -407,7 +407,7 @@ pub fn KexContext::drive(
   }
 }
 
-#cfg(not(platform="windows"))]
+#cfg(not(platform="windows"))
 fn KexContext::drive_ecdh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
@@ -478,7 +478,7 @@ fn KexContext::drive_ecdh(
   @crypto.bn_free(priv_key)
 }
 
-#cfg(platform="windows")]
+#cfg(platform="windows")
 fn KexContext::drive_ecdh(
   self : KexContext,
   _read_packet : () -> Bytes raise SshError,
@@ -488,7 +488,7 @@ fn KexContext::drive_ecdh(
   raise ProtocolError("kex: ECDH not available on Windows")
 }
 
-#cfg(not(platform="windows"))]
+#cfg(not(platform="windows"))
 fn KexContext::drive_dh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
@@ -592,7 +592,7 @@ fn KexContext::drive_dh(
   self.state = Done
 }
 
-#cfg(platform="windows")]
+#cfg(platform="windows")
 fn KexContext::drive_dh(
   self : KexContext,
   _read_packet : () -> Bytes raise SshError,

@@ -237,10 +237,10 @@ pub fn write_packet(
   packet
 }
 
-#cfg(platform="windows")]
+#cfg(platform="windows")
 fn packet_random_bytes(n : Int) -> Bytes { Bytes::make(n, b'\x00') }
 
-#cfg(not(platform="windows"))]
+#cfg(not(platform="windows"))
 fn packet_random_bytes(n : Int) -> Bytes {
   @crypto.rand_bytes(n) catch { _ => Bytes::make(n, b'\x00') }
 }
