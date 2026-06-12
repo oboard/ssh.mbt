@@ -90,9 +90,23 @@ pub fn Mac::update(self : Mac, data : Bytes) -> Unit {
 
 ///|
 pub fn Mac::finalize(self : Mac) -> Bytes raise CryptoError {
-  let result = hmac(self.alg, self.key, Bytes::from_array(self.buf))
+  let data = array_to_bytes(self.buf)
+  let result = hmac(self.alg, self.key, data)
   self.buf.clear()
   result
+}
+
+///|
+/// Compute HMAC over external data directly (bypasses internal buffer).
+pub fn Mac::hmac_on(self : Mac, data : Bytes) -> Bytes raise CryptoError {
+  hmac(self.alg, self.key, data)
+}
+
+///|
+fn array_to_bytes(buf : Array[Byte]) -> Bytes {
+  let len = buf.length()
+  let fixed = FixedArray::makei(len, i => buf[i])
+  Bytes::from_array(fixed)
 }
 
 ///|

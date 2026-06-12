@@ -69,7 +69,7 @@ pub fn parse_auth_reply(payload : Bytes) -> AuthReply raise SshError {
   let r = Reader::new(payload)
   let msg = r.read_byte()
   match msg {
-    b'\x32' => Success // SSH_MSG_USERAUTH_SUCCESS = 52
+    b'\x34' => Success // SSH_MSG_USERAUTH_SUCCESS = 52
     b'\x33' => {
       let methods = r.read_name_list()
       let partial = r.read_byte() != b'\x00'

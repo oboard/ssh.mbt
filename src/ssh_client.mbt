@@ -135,14 +135,14 @@ pub fn Client::auth_password(
 
   let service_req = build_service_request(SERVICE_USERAUTH)
   self.write_encrypted_packet(service_req)
-  let reply1 = self.read_encrypted_packet()
+  let reply1 = self.read_auth_packet()
   match parse_auth_reply(reply1) {
     ServiceAccept => ()
     _ => raise ProtocolError("auth: expected SERVICE_ACCEPT")
   }
   let auth_req = self.auth.build_password(password)
   self.write_encrypted_packet(auth_req)
-  let reply2 = self.read_encrypted_packet()
+  let reply2 = self.read_auth_packet()
   match parse_auth_reply(reply2) {
     Success => self.auth.apply_reply(Success)
     Failure(methods, _) => raise AuthFailed("methods: \{methods}")
@@ -166,7 +166,7 @@ pub fn Client::auth_publickey(
   // Step 0: 发送 SERVICE_REQUEST
   let service_req = build_service_request(SERVICE_USERAUTH)
   self.write_encrypted_packet(service_req)
-  let reply0 = self.read_encrypted_packet()
+  let reply0 = self.read_auth_packet()
   match parse_auth_reply(reply0) {
     ServiceAccept => ()
     _ => raise ProtocolError("auth: expected SERVICE_ACCEPT")
@@ -190,7 +190,7 @@ pub fn Client::auth_publickey(
   // Step 1: 发送 publickey 查询（无签名）
   let query = self.auth.build_publickey_query(pubkey_alg, pubkey_blob)
   self.write_encrypted_packet(query)
-  let reply1 = self.read_encrypted_packet()
+  let reply1 = self.read_auth_packet()
   match parse_auth_reply(reply1) {
     PublicKeyOk(_alg, _blob) => ()
     Failure(methods, _) =>
@@ -218,7 +218,7 @@ pub fn Client::auth_publickey(
     pubkey_alg, pubkey_blob, sig_blob,
   )
   self.write_encrypted_packet(sign_req)
-  let reply2 = self.read_encrypted_packet()
+  let reply2 = self.read_auth_packet()
   match parse_auth_reply(reply2) {
     Success => self.auth.apply_reply(Success)
     _ => raise AuthFailed("publickey sign: authentication rejected")
@@ -240,7 +240,7 @@ pub fn Client::auth_keyboard_interactive(
 
   let service_req = build_service_request(SERVICE_USERAUTH)
   self.write_encrypted_packet(service_req)
-  let reply0 = self.read_encrypted_packet()
+  let reply0 = self.read_auth_packet()
   match parse_auth_reply(reply0) {
     ServiceAccept => ()
     _ => raise ProtocolError("auth: expected SERVICE_ACCEPT")
@@ -250,7 +250,7 @@ pub fn Client::auth_keyboard_interactive(
   self.write_encrypted_packet(kbd_req)
 
   while true {
-    let reply = self.read_encrypted_packet()
+    let reply = self.read_auth_packet()
     match parse_auth_reply(reply) {
       Success => {
         self.auth.apply_reply(Success)
@@ -285,7 +285,7 @@ pub fn Client::auth_auto(
   // 1. SERVICE_REQUEST
   let service_req = build_service_request(SERVICE_USERAUTH)
   self.write_encrypted_packet(service_req)
-  let reply0 = self.read_encrypted_packet()
+  let reply0 = self.read_auth_packet()
   match parse_auth_reply(reply0) {
     ServiceAccept => ()
     _ => raise ProtocolError("auth: expected SERVICE_ACCEPT")
@@ -294,7 +294,7 @@ pub fn Client::auth_auto(
   // 2. none 探测
   let none_req = self.auth.build_initial()
   self.write_encrypted_packet(none_req)
-  let reply1 = self.read_encrypted_packet()
+  let reply1 = self.read_auth_packet()
   match parse_auth_reply(reply1) {
     Success => {
       self.auth.apply_reply(Success)
@@ -431,6 +431,24 @@ pub fn Client::close(self : Client) -> Unit {
 // ============== Internal packet I/O ==============
 
 ///|
+/// Read an encrypted packet, skipping SSH_MSG_IGNORE(2), DEBUG(4), EXT_INFO(7).
+fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
+  while true {
+    let payload = self.read_encrypted_packet()
+    if payload.length() == 0 {
+      raise ProtocolError("read_auth_packet: empty packet")
+    }
+    let msg_type = payload.unsafe_get(0).to_int()
+    match msg_type {
+      2 | 4 | 7 => () // IGNORE, DEBUG, EXT_INFO — skip
+      1 => raise ProtocolError("auth: server sent SSH_MSG_DISCONNECT")
+      _ => return payload
+    }
+  }
+  abort("unreachable")
+}
+
+///|
 fn Client::read_packet(self : Client) -> Bytes raise SshError {
   if self.encrypted {
     self.read_encrypted_packet()
@@ -456,11 +474,12 @@ fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
         e => raise IoError("read packet len: \{e}")
       }
       let pkt_len = decode_uint32(len_raw)
-      println("read_plain: pkt_len=\{pkt_len}")
+      println("read_plain: pkt_len=\{pkt_len}, seq_recv=\{self.seq_recv}")
       let body = conn.read_exact(pkt_len) catch {
         e => raise IoError("read packet body (expect \{pkt_len}): \{e}")
       }
       hex_dump("Plain packet", len_raw + body)
+      self.seq_recv = self.seq_recv + 1U
       let pad_len = body.unsafe_get(0).to_int()
       let payload_end = body.length() - pad_len
       let msg_type = if payload_end > 1 {
@@ -498,6 +517,7 @@ fn Client::write_plain_packet(
         e => raise IoError("write packet: \{e}")
       }
   }
+  self.seq_send = self.seq_send + 1U
 }
 
 ///|
@@ -507,6 +527,14 @@ fn Client::install_encryption(
 ) -> Unit raise SshError {
   let enc_alg = parse_cipher_algorithm(self.kex.enc_alg)
   let mac_alg = parse_mac_algorithm(self.kex.mac_alg)
+
+  println("* install_encryption: enc=\{self.kex.enc_alg}, mac=\{self.kex.mac_alg}")
+  hex_dump("  IV c2s", keys.iv_c2s)
+  hex_dump("  IV s2c", keys.iv_s2c)
+  hex_dump("  Enc key c2s", keys.enc_key_c2s)
+  hex_dump("  Enc key s2c", keys.enc_key_s2c)
+  hex_dump("  MAC key c2s", keys.mac_key_c2s)
+  hex_dump("  MAC key s2c", keys.mac_key_s2c)
 
   let cipher_c2s = @crypto.Cipher::new(
     enc_alg,
@@ -527,14 +555,13 @@ fn Client::install_encryption(
   self.cipher_c2s = Some(cipher_c2s)
   self.cipher_s2c = Some(cipher_s2c)
 
+  // RFC 4253 §7.2: Key E = mac_key_c2s, Key F = mac_key_s2c
   let mac_c2s = @crypto.Mac::new(mac_alg, keys.mac_key_c2s)
   let mac_s2c = @crypto.Mac::new(mac_alg, keys.mac_key_s2c)
   self.mac_c2s = Some(mac_c2s)
   self.mac_s2c = Some(mac_s2c)
 
   self.encrypted = true
-  self.seq_send = 0U
-  self.seq_recv = 0U
 }
 
 ///|
@@ -568,19 +595,108 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
         Some(m) => m.alg.output_len()
         None => 0
       }
-      println("* HMAC Len: \{mac_size}")
-
-      read_packet(
-        size => conn.read_exact(size) catch { e => raise IoError("read: \{e}") },
-        @crypto.CipherAlgorithm::aes128_ctr().block_len(),
-        mac_size,
-        body => {
-          cipher.update(body) catch {
-            e => raise ProtocolError("decrypt: \{e}")
-          }
-        },
-        (data, mac_tag) => if mac_size > 0 { verify_mac(self, data, mac_tag) },
+      println(
+        "* recv: HMAC Len=\{mac_size}, seq_recv=\{self.seq_recv}",
       )
+
+      // RFC 4253 §6.3: For stream ciphers (AES-CTR), the entire packet
+      // including packet_length is encrypted. Read and decrypt 4 bytes
+      // first to get the actual packet_length.
+      let enc_len = conn.read_exact(4) catch {
+        e => raise IoError("read pkt len: \{e}")
+      }
+      let len_bytes = cipher.update(enc_len) catch {
+        e => raise ProtocolError("decrypt pkt len: \{e}")
+      }
+      let packet_length = decode_uint32(len_bytes)
+      println(
+        "* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}",
+      )
+      if packet_length < 1 || packet_length > MAX_PACKET {
+        raise ProtocolError("read_packet: bad length \{packet_length}")
+      }
+
+      // Read remaining: encrypted body + MAC
+      let total = packet_length + mac_size
+      println("* read_packet: reading \{total} more bytes")
+      let raw = conn.read_exact(total) catch {
+        e => raise IoError("read pkt body: \{e}")
+      }
+
+      let full_packet = enc_len + raw
+      hex_dump(
+        "Encr body + HMAC (\{full_packet.length()} bytes)",
+        full_packet,
+      )
+
+      // Split: encrypted body + MAC
+      let enc_body = match Bytes::get_view(raw, start=0, end=packet_length) {
+        Some(v) => BytesView::to_owned(v)
+        None => raise ProtocolError("read_packet: body slice")
+      }
+      let mac_tag = if mac_size > 0 {
+        match Bytes::get_view(
+          raw,
+          start=packet_length,
+          end=packet_length + mac_size,
+        ) {
+          Some(v) => BytesView::to_owned(v)
+          None => raise ProtocolError("read_packet: mac slice")
+        }
+      } else {
+        b""
+      }
+
+      hex_dump("  body (encrypted, \{enc_body.length()} bytes)", enc_body)
+
+      // Decrypt body
+      let plaintext_body = cipher.update(enc_body) catch {
+        e => raise ProtocolError("decrypt: \{e}")
+      }
+      hex_dump(
+        "  body (decrypted, \{plaintext_body.length()} bytes)",
+        plaintext_body,
+      )
+
+      // RFC 4253 §6.4: MAC is over seq || unencrypted_packet (plaintext)
+      // unencrypted_packet includes the packet_length field
+      if mac_size > 0 {
+        let computed = compute_mac_s2c(self, len_bytes + plaintext_body)
+        hex_dump("  recv MAC input (seq || plen || body)", encode_uint32(self.seq_recv.reinterpret_as_int()) + len_bytes + plaintext_body)
+        hex_dump("  expected MAC", mac_tag)
+        hex_dump("  computed MAC", computed)
+        if computed != mac_tag {
+          println("* verify_mac: MAC mismatch")
+          raise MacMismatch
+        }
+        println("* verify_mac: MAC OK")
+      }
+      self.seq_recv = self.seq_recv + 1U
+
+      if plaintext_body.length() < 1 {
+        raise ProtocolError("read_packet: empty plaintext")
+      }
+      let padding_length = plaintext_body.unsafe_get(0).to_int()
+      let payload_end = plaintext_body.length() - padding_length
+      let msg_type_val = if payload_end > 1 {
+        plaintext_body.unsafe_get(1).to_int()
+      } else {
+        -1
+      }
+      println(
+        "* read_packet: pad_len=\{padding_length} payload_end=\{payload_end} msg_type=\{msg_type_val}",
+      )
+      if 1 + padding_length > plaintext_body.length() {
+        raise ProtocolError("read_packet: padding_length too large")
+      }
+      match Bytes::get_view(
+        plaintext_body,
+        start=1,
+        end=plaintext_body.length() - padding_length,
+      ) {
+        Some(v) => BytesView::to_owned(v)
+        None => raise ProtocolError("read_packet: payload slice")
+      }
     }
   }
 }
@@ -608,8 +724,15 @@ fn Client::write_encrypted_packet(
       } else {
         0
       }
-      println("* HMAC Len: \{mac_size}, seq_send=\{self.seq_send}")
       let block_size = @crypto.CipherAlgorithm::aes128_ctr().block_len()
+      let msg_type_val = if payload.length() > 0 {
+        payload.unsafe_get(0).to_int()
+      } else {
+        -1
+      }
+      println(
+        "* write_encr: msg_type=\{msg_type_val} HMAC Len=\{mac_size}, seq_send=\{self.seq_send}, block_size=\{block_size}",
+      )
 
       let packet = write_packet(payload, block_size, mac_enabled, data => {
         if mac_enabled {
@@ -620,14 +743,11 @@ fn Client::write_encrypted_packet(
       })
 
       let body_len = packet.length() - mac_size
-      // SSH RFC 4253 §6: packet_length (first 4 bytes) is NOT encrypted
-      let len_bytes = match Bytes::get_view(packet, start=0, end=4) {
+      // RFC 4253 §6.3: For stream ciphers (incl. AES-CTR), the entire
+      // packet including packet_length is encrypted as part of the stream.
+      let full_plain = match Bytes::get_view(packet, start=0, end=body_len) {
         Some(v) => BytesView::to_owned(v)
-        None => raise ProtocolError("write: len slice")
-      }
-      let enc_body = match Bytes::get_view(packet, start=4, end=body_len) {
-        Some(v) => BytesView::to_owned(v)
-        None => raise ProtocolError("write: enc body slice")
+        None => raise ProtocolError("write: plain slice")
       }
       let mac = if mac_size > 0 {
         match Bytes::get_view(packet, start=body_len, end=packet.length()) {
@@ -638,20 +758,36 @@ fn Client::write_encrypted_packet(
         b""
       }
 
-      let encrypted = cipher.update(enc_body) catch {
+      hex_dump(
+        "  packet plaintext (len=\{full_plain.length()}, body=\{full_plain.length() - 4})",
+        full_plain,
+      )
+      let encrypted = cipher.update(full_plain) catch {
         e => raise ProtocolError("encrypt: \{e}")
       }
-      let wire_data = len_bytes + encrypted + mac
-      hex_dump(
-        "Plaintext before encr (\{body_len - 4} bytes)",
-        len_bytes + enc_body,
-      )
-      hex_dump("Encr + HMAC payload (\{wire_data.length()} bytes)", wire_data)
+      let wire_data = encrypted + mac
+      hex_dump("  packet on wire (\{wire_data.length()} bytes)", wire_data)
       conn.write_bytes(wire_data) catch {
         e => raise IoError("write: \{e}")
       }
       self.seq_send = self.seq_send + 1U
     }
+  }
+}
+
+///|
+/// Compute MAC with s2c key for verification, using seq_recv.
+fn compute_mac_s2c(
+  client : Client,
+  data : Bytes,
+) -> Bytes raise SshError {
+  let mac_ctx = match client.mac_s2c {
+    Some(m) => m
+    None => return b""
+  }
+  let seq_bytes = encode_uint32(client.seq_recv.reinterpret_as_int())
+  mac_ctx.hmac_on(seq_bytes + data) catch {
+    e => raise ProtocolError("MAC compute s2c: \{e}")
   }
 }
 
@@ -666,11 +802,17 @@ fn verify_mac(
     None => return
   }
   let seq_bytes = encode_uint32(client.seq_recv.reinterpret_as_int())
-  mac_ctx.update(seq_bytes)
-  mac_ctx.update(data)
-  let computed = mac_ctx.finalize() catch {
+  let full_input = seq_bytes + data
+  // Use hmac_on to bypass internal Array[Byte] buffer
+  let computed = mac_ctx.hmac_on(full_input) catch {
     e => raise ProtocolError("MAC: \{e}")
   }
+  println(
+    "* verify_mac: seq_recv=\{client.seq_recv}, data_len=\{data.length()}, tag_len=\{expected_tag.length()}, computed_len=\{computed.length()}",
+  )
+  hex_dump("  MAC input (seq || data)", full_input)
+  hex_dump("  expected MAC", expected_tag)
+  hex_dump("  computed MAC", computed)
   if computed != expected_tag {
     raise MacMismatch
   }
@@ -686,9 +828,15 @@ fn compute_mac(client : Client, data : Bytes) -> Bytes raise SshError {
   let seq_bytes = encode_uint32(client.seq_send.reinterpret_as_int())
   mac_ctx.update(seq_bytes)
   mac_ctx.update(data)
-  mac_ctx.finalize() catch {
+  let tag = mac_ctx.finalize() catch {
     e => raise ProtocolError("MAC compute: \{e}")
   }
+  println(
+    "* compute_mac: seq_send=\{client.seq_send}, data_len=\{data.length()}, tag_len=\{tag.length()}",
+  )
+  hex_dump("  MAC input (seq || packet)", seq_bytes + data)
+  hex_dump("  MAC tag", tag)
+  tag
 }
 
 // ============== Helpers ==============

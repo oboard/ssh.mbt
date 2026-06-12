@@ -29,7 +29,10 @@ pub fn CipherAlgorithm::iv_len(self : CipherAlgorithm) -> Int {
 
 ///|
 pub fn CipherAlgorithm::block_len(self : CipherAlgorithm) -> Int {
-  16
+  // RFC 4344 says block_size for CTR should be the cipher block size (16).
+  // However, OpenSSH has used 8 since 2008 for backward compatibility.
+  // Match OpenSSH behavior to ensure padding aligns with server expectations.
+  8
 }
 
 ///|

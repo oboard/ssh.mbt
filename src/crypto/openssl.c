@@ -78,6 +78,8 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, EVP_MAC_update, (EVP_MAC_CTX *ctx, const unsigned char *data, size_t datalen)) \
   IMPORT_FUNC(int, EVP_MAC_final, (EVP_MAC_CTX *ctx, unsigned char *out, size_t *outl, size_t outsize)) \
   IMPORT_FUNC(int, EVP_MAC_CTX_set_params, (EVP_MAC_CTX *ctx, const void *params)) \
+  /* old-style HMAC (deprecated but stable) */ \
+  IMPORT_FUNC(unsigned char *, HMAC, (const EVP_MD *evp_md, const void *key, int key_len, const unsigned char *d, size_t n, unsigned char *md, unsigned int *md_len)) \
   /* pkey */ \
   IMPORT_FUNC(EVP_PKEY_CTX *, EVP_PKEY_CTX_new, (EVP_PKEY *pkey, ENGINE *e)) \
   IMPORT_FUNC(EVP_PKEY_CTX *, EVP_PKEY_CTX_new_from_name, (void *libctx, const char *name, const char *propq)) \
@@ -265,26 +267,30 @@ int moonbitlang_ssh_hmac(
   const unsigned char *data, int data_len,
   unsigned char *out, int *out_len
 ) {
-  const char *digest = hmac_digest_name(alg_id);
-  if (!digest) return 0;
-  EVP_MAC *mac = EVP_MAC_fetch(0, "HMAC", 0);
-  if (!mac) return 0;
-  EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
-  if (!ctx) { EVP_MAC_free(mac); return 0; }
-  int ok = 1;
-  void *params = build_hmac_digest_param(digest);
-  if (!params || EVP_MAC_CTX_set_params(ctx, (const OSSL_PARAM *)params) != 1) ok = 0;
-  if (ok && EVP_MAC_init(ctx, key, (size_t)key_len, 0) != 1) ok = 0;
-  if (ok && EVP_MAC_update(ctx, data, (size_t)data_len) != 1) ok = 0;
-  size_t outl = 0;
-  if (ok) {
-    int max_out = moonbitlang_ssh_md_size(alg_id);
-    if (EVP_MAC_final(ctx, out, &outl, (size_t)max_out) != 1) ok = 0;
+  const EVP_MD *md = md_by_id(alg_id);
+  if (!md) return 0;
+
+  /* Debug: dump HMAC key and full data */
+  fprintf(stderr, "openssl_hmac: alg=%d key_len=%d data_len=%d\n", alg_id, key_len, data_len);
+  fprintf(stderr, "HMAC_KEY_HEX=");
+  for (int i = 0; i < key_len; i++) fprintf(stderr, "%02x", key[i]);
+  fprintf(stderr, "\nHMAC_DATA_HEX=");
+  for (int i = 0; i < data_len; i++) fprintf(stderr, "%02x", data[i]);
+  fprintf(stderr, "\n");
+
+  unsigned int md_len = 0;
+  unsigned char *result = HMAC(md, key, key_len, data, (size_t)data_len, out, &md_len);
+  if (!result) return 0;
+
+  /* Debug: dump full HMAC output */
+  fprintf(stderr, "openssl_hmac: out=");
+  for (int i = 0; i < (int)md_len; i++) {
+    fprintf(stderr, "%02x", out[i]);
   }
-  if (out_len) *out_len = (int)outl;
-  EVP_MAC_CTX_free(ctx);
-  EVP_MAC_free(mac);
-  return ok;
+  fprintf(stderr, " (len=%d)\n", (int)md_len);
+
+  if (out_len) *out_len = (int)md_len;
+  return 1;
 }
 
 /* ------------------------------------------------------------------ */

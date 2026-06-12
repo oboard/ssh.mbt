@@ -365,6 +365,9 @@ fn kdf(
   session_id : Bytes,
   needed : Int,
 ) -> Bytes raise @crypto.CryptoError {
+  // RFC 4253 §7.2: K in KDF is the shared secret encoded as mpint.
+  // This matches OpenSSH and C++ reference (appendVectBuffer).
+  let k_mpint = encode_mpint_of_bytes(k)
   let x_bytes = @utf8.encode(x)
   let mut out = b""
   let mut k1 = b""
@@ -372,14 +375,14 @@ fn kdf(
   while out.length() < needed {
     if i == 0 {
       let h1 = @crypto.Hasher::new(hash_alg)
-      h1.update(k)
+      h1.update(k_mpint)
       h1.update(h)
       h1.update(x_bytes)
       h1.update(session_id)
       k1 = h1.finalize()
     } else {
       let h1 = @crypto.Hasher::new(hash_alg)
-      h1.update(k)
+      h1.update(k_mpint)
       h1.update(h)
       h1.update(k1)
       k1 = h1.finalize()

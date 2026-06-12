@@ -228,13 +228,17 @@ pub fn read_packet(
 ) -> Bytes raise SshError {
   let len_bytes = read_exact(4)
   let packet_length = decode_uint32(len_bytes)
+  println(
+    "* read_packet: packet_length=\{packet_length}, mac_size=\{mac_size}",
+  )
   if packet_length < 1 || packet_length > MAX_PACKET {
     raise ProtocolError("read_packet: bad length \{packet_length}")
   }
   let total = packet_length + mac_size
+  println("* read_packet: reading \{total} more bytes")
   let raw = read_exact(total)
   let full_packet = len_bytes + raw
-  hex_dump("Encr + HMAC payload (\{full_packet.length()} bytes)", full_packet)
+  hex_dump("Encr body + HMAC (\{full_packet.length()} bytes)", full_packet)
   let body = match Bytes::get_view(raw, start=0, end=packet_length) {
     Some(v) => BytesView::to_owned(v)
     None => raise ProtocolError("read_packet: body slice")
@@ -247,14 +251,25 @@ pub fn read_packet(
   } else {
     b""
   }
+  hex_dump("  body (encrypted, \{body.length()} bytes)", body)
   if mac_size > 0 {
     verify_mac(len_bytes + body, mac)
   }
   let plaintext = decrypt(body)
+  hex_dump("  body (decrypted, \{plaintext.length()} bytes)", plaintext)
   if plaintext.length() < 1 {
     raise ProtocolError("read_packet: empty plaintext")
   }
   let padding_length = plaintext.unsafe_get(0).to_int()
+  let payload_end = plaintext.length() - padding_length
+  let msg_type_val = if payload_end > 1 {
+    plaintext.unsafe_get(1).to_int()
+  } else {
+    -1
+  }
+  println(
+    "* read_packet: pad_len=\{padding_length} payload_end=\{payload_end} msg_type=\{msg_type_val}",
+  )
   if 1 + padding_length > plaintext.length() {
     raise ProtocolError("read_packet: padding_length too large")
   }
@@ -406,13 +421,33 @@ pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
   if bytes.length() == 0 {
     return encode_string(b"\x00")
   }
-  let first = bytes.unsafe_get(0).to_int()
-  if first >= 0x80 {
-    encode_uint32(bytes.length() + 1) +
-    Bytes::from_array(FixedArray::make(1, b'\x00')) +
-    bytes
+  // Skip leading zero bytes (RFC 4251 §5: mpint stores the minimal
+  // representation of the integer).  OpenSSH's sshbuf_put_bignum2_bytes
+  // does the same.
+  let mut start = 0
+  let arr = bytes.to_fixedarray()
+  while start < bytes.length() && arr.unsafe_get(start).to_int() == 0 {
+    start = start + 1
+  }
+  if start >= bytes.length() {
+    return encode_string(b"\x00")
+  }
+  let remaining = bytes.length() - start
+  let first_nonzero = arr.unsafe_get(start).to_int()
+  let body = if start > 0 {
+    match Bytes::get_view(bytes, start=start, end=bytes.length()) {
+      Some(v) => BytesView::to_owned(v)
+      None => encode_string(b"\x00")
+    }
   } else {
-    encode_string(bytes)
+    bytes
+  }
+  if first_nonzero >= 0x80 {
+    encode_uint32(remaining + 1) +
+    Bytes::from_array(FixedArray::make(1, b'\x00')) +
+    body
+  } else {
+    encode_uint32(remaining) + body
   }
 }
 

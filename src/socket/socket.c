@@ -363,6 +363,13 @@ int socket_recv(int handle, moonbit_bytes_t buffer, int offset, int size) {
         /* Error occurred */
         fprintf(stderr, "socket_recv: error %d (errno=%d: %s) on fd=%d\n",
                 result, errno, strerror(errno), handle);
+    } else if (result > 0 && result <= 64) {
+        /* Dump received data for small reads */
+        fprintf(stderr, "socket_recv: got %d bytes on fd=%d: ", result, handle);
+        for (int i = 0; i < result; i++) {
+            fprintf(stderr, "%02x ", (unsigned char)(buf_ptr[offset + i]));
+        }
+        fprintf(stderr, "\n");
     }
     return result;
 }

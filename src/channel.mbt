@@ -19,13 +19,13 @@ pub const MSG_CHANNEL_WINDOW_ADJUST : Byte = b'\x5d' // 93
 pub const MSG_CHANNEL_DATA : Byte = b'\x5e' // 94
 
 ///|
-pub const MSG_CHANNEL_EXTENDED_DATA : Byte = b'\x7f' // 127
+pub const MSG_CHANNEL_EXTENDED_DATA : Byte = b'\x5f' // 95
 
 ///|
-pub const MSG_CHANNEL_EOF : Byte = b'\x5f' // 95
+pub const MSG_CHANNEL_EOF : Byte = b'\x60' // 96
 
 ///|
-pub const MSG_CHANNEL_CLOSE : Byte = b'\x60' // 96
+pub const MSG_CHANNEL_CLOSE : Byte = b'\x61' // 97
 
 ///|
 pub const MSG_CHANNEL_REQUEST : Byte = b'\x62' // 98
@@ -300,6 +300,9 @@ pub fn Channel::handle_inbound(
       self.state = Done
       []
     }
+    // SSH_MSG_GLOBAL_REQUEST(80), REQUEST_SUCCESS(81), REQUEST_FAILURE(82)
+    // SSH_MSG_IGNORE(2), DEBUG(4), EXT_INFO(7) — skip
+    b'\x50' | b'\x51' | b'\x52' | b'\x02' | b'\x04' | b'\x07' => []
     _ => raise ProtocolError("channel: unexpected msg \{msg.to_int()}")
   }
 }
