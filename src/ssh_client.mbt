@@ -450,14 +450,24 @@ fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) => {
       let len_raw = conn.read_exact(4) catch {
-        e => raise IoError("read packet: \{e}")
+        e => raise IoError("read packet len: \{e}")
       }
       let pkt_len = decode_uint32(len_raw)
+      println("read_plain: pkt_len=\{pkt_len}")
       let body = conn.read_exact(pkt_len) catch {
-        e => raise IoError("read packet: body: \{e}")
+        e => raise IoError("read packet body (expect \{pkt_len}): \{e}")
       }
+      hex_dump("Plain packet", len_raw + body)
       let pad_len = body.unsafe_get(0).to_int()
       let payload_end = body.length() - pad_len
+      let msg_type = if payload_end > 1 {
+        body.unsafe_get(1).to_int()
+      } else {
+        -1
+      }
+      println(
+        "read_plain: pad_len=\{pad_len} payload_end=\{payload_end} msg_type=\{msg_type}",
+      )
       match Bytes::get_view(body, start=1, end=payload_end) {
         Some(v) => BytesView::to_owned(v)
         None => raise ProtocolError("read_plain packet: slice")
@@ -472,6 +482,13 @@ fn Client::write_plain_packet(
   payload : Bytes,
 ) -> Unit raise SshError {
   let packet = write_packet(payload, 8, false, _data => b"")
+  let msg_type = if payload.length() > 0 {
+    payload.unsafe_get(0).to_int()
+  } else {
+    -1
+  }
+  println("write_plain: type=\{msg_type} total_len=\{packet.length()}")
+  hex_dump("Plain packet", packet)
   match self.conn {
     Connected(conn) =>
       conn.write_bytes(packet) catch {
@@ -548,6 +565,7 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
         Some(m) => m.alg.output_len()
         None => 0
       }
+      println("* HMAC Len: \{mac_size}")
 
       read_packet(
         size => conn.read_exact(size) catch { e => raise IoError("read: \{e}") },
@@ -579,6 +597,15 @@ fn Client::write_encrypted_packet(
         Some(_) => true
         None => false
       }
+      let mac_size = if mac_enabled {
+        match self.mac_c2s {
+          Some(m) => m.alg.output_len()
+          None => 0
+        }
+      } else {
+        0
+      }
+      println("* HMAC Len: \{mac_size}, seq_send=\{self.seq_send}")
       let block_size = @crypto.CipherAlgorithm::aes128_ctr().block_len()
 
       let packet = write_packet(payload, block_size, mac_enabled, data => {
@@ -589,18 +616,15 @@ fn Client::write_encrypted_packet(
         }
       })
 
-      let mac_size = if mac_enabled {
-        match self.mac_c2s {
-          Some(m) => m.alg.output_len()
-          None => 0
-        }
-      } else {
-        0
-      }
       let body_len = packet.length() - mac_size
-      let body = match Bytes::get_view(packet, start=0, end=body_len) {
+      // SSH RFC 4253 §6: packet_length (first 4 bytes) is NOT encrypted
+      let len_bytes = match Bytes::get_view(packet, start=0, end=4) {
         Some(v) => BytesView::to_owned(v)
-        None => raise ProtocolError("write: body slice")
+        None => raise ProtocolError("write: len slice")
+      }
+      let enc_body = match Bytes::get_view(packet, start=4, end=body_len) {
+        Some(v) => BytesView::to_owned(v)
+        None => raise ProtocolError("write: enc body slice")
       }
       let mac = if mac_size > 0 {
         match Bytes::get_view(packet, start=body_len, end=packet.length()) {
@@ -611,10 +635,16 @@ fn Client::write_encrypted_packet(
         b""
       }
 
-      let encrypted_body = cipher.update(body) catch {
+      let encrypted = cipher.update(enc_body) catch {
         e => raise ProtocolError("encrypt: \{e}")
       }
-      conn.write_bytes(encrypted_body + mac) catch {
+      let wire_data = len_bytes + encrypted + mac
+      hex_dump(
+        "Plaintext before encr (\{body_len - 4} bytes)",
+        len_bytes + enc_body,
+      )
+      hex_dump("Encr + HMAC payload (\{wire_data.length()} bytes)", wire_data)
+      conn.write_bytes(wire_data) catch {
         e => raise IoError("write: \{e}")
       }
       self.seq_send = self.seq_send + 1U

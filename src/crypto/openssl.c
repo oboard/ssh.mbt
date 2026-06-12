@@ -97,6 +97,7 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(EVP_PKEY *, EVP_PKEY_new, (void)) \
   IMPORT_FUNC(void, EVP_PKEY_free, (EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_size, (const EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_PKEY_get_octet_string_param, (const EVP_PKEY *pkey, const char *key_name, unsigned char *buf, size_t bufsize, size_t *written_len)) \
   IMPORT_FUNC(int, i2d_PUBKEY, (const EVP_PKEY *a, unsigned char **pp)) \
   IMPORT_FUNC(EVP_PKEY *, d2i_PUBKEY, (EVP_PKEY **a, const unsigned char **pp, long length)) \
   IMPORT_FUNC(int, i2d_PrivateKey, (EVP_PKEY *a, unsigned char **pp)) \
@@ -329,6 +330,114 @@ int moonbitlang_ssh_cipher_final(void *ctx, int encrypt,
 /* ------------------------------------------------------------------ */
 /* ECDH P-256                                                         */
 /* ------------------------------------------------------------------ */
+
+/*
+ * Extract the raw uncompressed EC point (04 || x || y) from a
+ * SubjectPublicKeyInfo DER blob for EC P-256.
+ *
+ * SPKI DER structure (P-256):
+ *   30 59                    SEQUENCE (89 bytes)
+ *     30 13                  SEQUENCE (19 bytes) AlgorithmIdentifier
+ *       06 07 ...             OID ecPublicKey
+ *       06 08 ...             OID secp256r1
+ *     03 3b                  BIT STRING (59 bytes)
+ *       00                   unused bits
+ *       04 xx...             raw point (65 bytes)
+ *
+ * Returns the length of the raw point, or 0 on failure.
+ */
+static int extract_raw_ec_point(const unsigned char *spki, int spki_len,
+                                unsigned char *out, int out_cap) {
+  int pos = 0;
+  /* Outer SEQUENCE */
+  if (pos >= spki_len || spki[pos] != 0x30) return 0; pos++;
+  if (pos >= spki_len) return 0;
+  int outer_len = spki[pos]; pos++;
+  if (pos + outer_len > spki_len) return 0;
+  /* Inner SEQUENCE (AlgorithmIdentifier) */
+  if (pos >= spki_len || spki[pos] != 0x30) return 0; pos++;
+  if (pos >= spki_len) return 0;
+  int alg_len = spki[pos]; pos++;
+  pos += alg_len; /* skip AlgorithmIdentifier */
+  /* BIT STRING */
+  if (pos >= spki_len || spki[pos] != 0x03) return 0; pos++;
+  if (pos >= spki_len) return 0;
+  int bs_len = spki[pos]; pos++;
+  if (pos + bs_len > spki_len) return 0;
+  /* Unused bits count */
+  /* Handle long-form length */
+  int bs_content_len = bs_len;
+  /* Skip unused bits byte */
+  pos++;
+  int raw_len = bs_content_len - 1; /* subtract unused bits byte */
+  if (raw_len <= 0 || raw_len > out_cap) return 0;
+  memcpy(out, spki + pos, (size_t)raw_len);
+  return raw_len;
+}
+
+/*
+ * Build a minimal SubjectPublicKeyInfo DER for EC P-256
+ * wrapping the given raw uncompressed EC point.
+ *
+ * Output format (89 bytes):
+ *   30 59 30 13 06 07 2a 86 48 ce 3d 02 01
+ *   06 08 2a 86 48 ce 3d 03 01 07 03 3b 00
+ *   <raw_point (65 bytes)>
+ */
+static int wrap_raw_point_in_spki(const unsigned char *raw, int raw_len,
+                                  unsigned char *out, int out_cap) {
+  /* Only P-256 raw points are supported (65 bytes: 04 || x || y) */
+  if (raw_len != 65) return 0;
+  if (out_cap < 89) return 0;
+  const unsigned char spki_prefix[] = {
+    0x30, 0x59,                                           /* SEQUENCE (89) */
+      0x30, 0x13,                                         /* SEQUENCE (19) */
+        0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, /* ecPublicKey */
+        0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, /* secp256r1 */
+      0x03, 0x3b,                                         /* BIT STRING (59) */
+        0x00                                              /* unused bits */
+  };
+  memcpy(out, spki_prefix, sizeof(spki_prefix));
+  memcpy(out + sizeof(spki_prefix), raw, (size_t)raw_len);
+  return (int)(sizeof(spki_prefix) + raw_len);
+}
+
+/*
+ * Extract the raw uncompressed EC point (04 || x || y, 65 bytes for P-256)
+ * from an EVP_PKEY using OpenSSL's EVP_PKEY_get_octet_string_param.
+ * Falls back to parsing SPKI DER if the direct API is unavailable.
+ */
+static int get_ec_raw_point(void *pkey, unsigned char *out, int out_cap) {
+  size_t written = 0;
+  int rc = EVP_PKEY_get_octet_string_param((EVP_PKEY *)pkey, "pub", out, (size_t)out_cap, &written);
+  if (rc == 1 && written == 65) {
+    return (int)written;
+  }
+  /* Fallback: parse from SPKI DER */
+  unsigned char *der = 0;
+  int der_len = i2d_PUBKEY((const EVP_PKEY *)pkey, &der);
+  if (der_len <= 0) return 0;
+  int pos = 0;
+  if (pos >= der_len || der[pos] != 0x30) { free(der); return 0; } pos++;
+  if (pos >= der_len) { free(der); return 0; }
+  int outer_len = der[pos]; pos++;
+  if (pos + outer_len > der_len) { free(der); return 0; }
+  if (pos >= der_len || der[pos] != 0x30) { free(der); return 0; } pos++;
+  if (pos >= der_len) { free(der); return 0; }
+  int alg_len = der[pos]; pos++;
+  pos += alg_len;
+  if (pos >= der_len || der[pos] != 0x03) { free(der); return 0; } pos++;
+  if (pos >= der_len) { free(der); return 0; }
+  int bs_len = der[pos]; pos++;
+  if (pos + bs_len > der_len) { free(der); return 0; }
+  pos++; /* skip unused bits */
+  int raw_len = bs_len - 1;
+  if (raw_len <= 0 || raw_len > out_cap) { free(der); return 0; }
+  memcpy(out, der + pos, (size_t)raw_len);
+  free(der);
+  return raw_len;
+}
+
 int moonbitlang_ssh_ecdh_gen_key(void **priv_out, unsigned char *pub_buf, int *pub_len) {
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, "EC", 0);
   if (!ctx) return 0;
@@ -337,24 +446,23 @@ int moonbitlang_ssh_ecdh_gen_key(void **priv_out, unsigned char *pub_buf, int *p
   EVP_PKEY *pkey = 0;
   if (EVP_PKEY_keygen(ctx, &pkey) <= 0) { EVP_PKEY_CTX_free(ctx); return 0; }
   EVP_PKEY_CTX_free(ctx);
-  /* Get public key in uncompressed SEC1 format */
-  unsigned char *der = 0;
-  int der_len = i2d_PUBKEY(pkey, &der);
-  if (der_len <= 0) { EVP_PKEY_free(pkey); return 0; }
-  if (pub_buf && *pub_len >= der_len) {
-    memcpy(pub_buf, der, (size_t)der_len);
-  }
-  *pub_len = der_len;
-  free(der);
+  /* Get raw uncompressed EC point directly from the key */
+  int raw_len = get_ec_raw_point(pkey, pub_buf, *pub_len);
+  if (raw_len <= 0) { EVP_PKEY_free(pkey); return 0; }
+  *pub_len = raw_len;
   *priv_out = pkey;
   return 1;
 }
 
 int moonbitlang_ssh_ecdh_derive(void *our, const unsigned char *peer_pub, int peer_len,
                                 unsigned char *out, int *out_len) {
+  /* Wrap raw EC point in SPKI DER so d2i_PUBKEY can parse it */
+  unsigned char spki_buf[128];
+  int spki_len = wrap_raw_point_in_spki(peer_pub, peer_len, spki_buf, sizeof(spki_buf));
+  if (spki_len <= 0) return 0;
   EVP_PKEY *peer = 0;
-  const unsigned char *p = peer_pub;
-  peer = d2i_PUBKEY(0, &p, (long)peer_len);
+  const unsigned char *p = spki_buf;
+  peer = d2i_PUBKEY(0, &p, (long)spki_len);
   if (!peer) return 0;
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)our, 0);
   if (!ctx) { EVP_PKEY_free(peer); return 0; }

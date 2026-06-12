@@ -233,6 +233,8 @@ pub fn read_packet(
   }
   let total = packet_length + mac_size
   let raw = read_exact(total)
+  let full_packet = len_bytes + raw
+  hex_dump("Encr + HMAC payload (\{full_packet.length()} bytes)", full_packet)
   let body = match Bytes::get_view(raw, start=0, end=packet_length) {
     Some(v) => BytesView::to_owned(v)
     None => raise ProtocolError("read_packet: body slice")
@@ -276,7 +278,7 @@ pub fn write_packet(
   let min_pad = 4
   let payload_len = payload.length()
   let mut padding_length = min_pad
-  while (payload_len + padding_length) % bs != 4 {
+  while (1 + payload_len + padding_length) % bs != 0 {
     padding_length = padding_length + 1
   }
   let padding = packet_random_bytes(padding_length)
@@ -303,6 +305,59 @@ fn packet_random_bytes(n : Int) -> Bytes {
 fn packet_random_bytes(n : Int) -> Bytes {
   @crypto.rand_bytes(n) catch {
     _ => Bytes::make(n, b'\x00')
+  }
+}
+
+// ============== Hex dump debugging ==============
+
+///|
+fn hex_nibble_to_string(n : Int) -> String {
+  if n < 10 {
+    (n + 48).unsafe_to_char().to_string()
+  } else {
+    (n - 10 + 97).unsafe_to_char().to_string()
+  }
+}
+
+///|
+/// 以 Wireshark 风格打印字节的 hex dump。
+/// 输出格式：
+///   * label:
+///
+///   00000:  3b 12 1a 82 6e c4 20 bd ff a1 6c 99 a9 f6 5d 9b  ;...n. ...l...].
+pub fn hex_dump(label : String, data : Bytes) -> Unit {
+  println("* \{label}:")
+  let len = data.length()
+  let arr = data.to_fixedarray()
+  let mut i = 0
+  while i < len {
+    let addr_str = hex_nibble_to_string((i >> 16) & 0xf) +
+      hex_nibble_to_string((i >> 12) & 0xf) +
+      hex_nibble_to_string((i >> 8) & 0xf) +
+      hex_nibble_to_string((i >> 4) & 0xf) +
+      hex_nibble_to_string(i & 0xf)
+    let mut hex_part = ""
+    let mut ascii_part = ""
+    for j = 0; j < 16; j = j + 1 {
+      let idx = i + j
+      if idx < len {
+        let b_val = arr.unsafe_get(idx).to_int()
+        hex_part = hex_part +
+          hex_nibble_to_string((b_val >> 4) & 0xf) +
+          hex_nibble_to_string(b_val & 0xf) +
+          " "
+        if b_val >= 0x20 && b_val < 0x7f {
+          ascii_part = ascii_part + b_val.unsafe_to_char().to_string()
+        } else {
+          ascii_part = ascii_part + "."
+        }
+      } else {
+        hex_part = hex_part + "   "
+        ascii_part = ascii_part + " "
+      }
+    }
+    println(addr_str + ":  " + hex_part + " " + ascii_part)
+    i = i + 16
   }
 }
 
