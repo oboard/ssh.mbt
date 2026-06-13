@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y gcc libssl-dev strace
 RUN curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash \
      && code-server --install-extension moonbit.moonbit-lang
 
-RUN curl -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash \
-     && export PATH="/root/.local/bin:$PATH"
+RUN curl -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
+
+ENV PATH="/root/.local/bin:$PATH"
 
 RUN code-server --install-extension tamasfe.even-better-toml \
      && code-server --install-extension usernamehw.errorlens \
