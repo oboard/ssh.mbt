@@ -6,3 +6,4 @@ target
 .moonagent/
 .claude
 CNB_VSCODE_PROXY_URI
+.workbuddy

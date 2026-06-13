@@ -23,8 +23,6 @@ void moonbit_set_moonssh_debug(int32_t val) {
 #include <ws2tcpip.h>
 #include <windows.h>
 
-#pragma comment(lib, "ws2_32.lib")
-
 static int winsock_initialized = 0;
 static HMODULE winsock_module = 0;
 
@@ -37,6 +35,7 @@ typedef int (WSAAPI *CloseSocketFn)(SOCKET);
 typedef unsigned long (WSAAPI *InetAddrFn)(const char *);
 typedef struct hostent *(WSAAPI *GetHostByNameFn)(const char *);
 typedef int (WSAAPI *WSAGetLastErrorFn)(void);
+typedef int (WSAAPI *SetSockOptFn)(SOCKET, int, int, const char *, int);
 
 static WSAStartupFn p_WSAStartup = 0;
 static SocketFn p_socket = 0;
@@ -47,6 +46,7 @@ static CloseSocketFn p_closesocket = 0;
 static InetAddrFn p_inet_addr = 0;
 static GetHostByNameFn p_gethostbyname = 0;
 static WSAGetLastErrorFn p_WSAGetLastError = 0;
+static SetSockOptFn p_setsockopt = 0;
 
 static int load_winsock(void) {
     if (winsock_module) {
@@ -65,9 +65,10 @@ static int load_winsock(void) {
     p_inet_addr = (InetAddrFn)GetProcAddress(winsock_module, "inet_addr");
     p_gethostbyname = (GetHostByNameFn)GetProcAddress(winsock_module, "gethostbyname");
     p_WSAGetLastError = (WSAGetLastErrorFn)GetProcAddress(winsock_module, "WSAGetLastError");
+    p_setsockopt = (SetSockOptFn)GetProcAddress(winsock_module, "setsockopt");
     if (!p_WSAStartup || !p_socket || !p_connect || !p_send || !p_recv ||
         !p_closesocket || !p_inet_addr || !p_gethostbyname ||
-        !p_WSAGetLastError) {
+        !p_WSAGetLastError || !p_setsockopt) {
         return -1;
     }
     return 0;
@@ -242,12 +243,12 @@ void socket_close(int handle) {
  * Returns 0 on success, -1 on error.
  */
 int socket_set_nodelay(int handle) {
-    if (!p_send && load_winsock() != 0) {
+    if (!p_setsockopt && load_winsock() != 0) {
         return -1;
     }
     char flag = 1;
     SOCKET sock = (SOCKET)handle;
-    return setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    return p_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 }
 
 #else
