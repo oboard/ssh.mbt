@@ -9,4 +9,5 @@ RUN curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash \
 
 RUN code-server --install-extension tamasfe.even-better-toml \
      && code-server --install-extension usernamehw.errorlens \
-     && code-server --install-extension chanhx.crabviz
+     && code-server --install-extension chanhx.crabviz \
+     && code-server --install-extension Anthropic.claude-code

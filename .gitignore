@@ -5,3 +5,4 @@ target
 .mooncakes/
 .moonagent/
 .claude
+CNB_VSCODE_PROXY_URI
