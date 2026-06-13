@@ -456,13 +456,6 @@ pub fn KexContext::new(v_c : Bytes, v_s : Bytes) -> KexContext {
 }
 
 ///|
-#cfg(platform="windows")
-fn kex_random_bytes(n : Int) -> Bytes {
-  Bytes::make(n, b'\x00')
-}
-
-///|
-#cfg(not(platform="windows"))
 fn kex_random_bytes(n : Int) -> Bytes {
   @crypto.rand_bytes(n) catch {
     _ => Bytes::make(n, b'\x00')
@@ -554,7 +547,6 @@ pub fn KexContext::drive(
 }
 
 ///|
-#cfg(not(platform="windows"))
 fn KexContext::drive_ecdh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
@@ -641,18 +633,6 @@ fn KexContext::drive_ecdh(
 }
 
 ///|
-#cfg(platform="windows")
-fn KexContext::drive_ecdh(
-  self : KexContext,
-  _read_packet : () -> Bytes raise SshError,
-  _write_packet : (Bytes) -> Unit raise SshError,
-  _accept_host_key : (String, Bytes) -> Bool,
-) -> Unit raise SshError {
-  raise ProtocolError("kex: ECDH not available on Windows")
-}
-
-///|
-#cfg(not(platform="windows"))
 fn KexContext::drive_dh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
@@ -745,17 +725,6 @@ fn KexContext::drive_dh(
   }
   self.state = InstallKeys
   self.state = Done
-}
-
-///|
-#cfg(platform="windows")
-fn KexContext::drive_dh(
-  self : KexContext,
-  _read_packet : () -> Bytes raise SshError,
-  _write_packet : (Bytes) -> Unit raise SshError,
-  _accept_host_key : (String, Bytes) -> Bool,
-) -> Unit raise SshError {
-  raise ProtocolError("kex: DH not available on Windows")
 }
 
 // ============== Skip extension messages ==============
