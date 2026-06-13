@@ -11,7 +11,7 @@
 
 name = "PaiGack/ssh_client"
 
-version = "0.1.0"
+version = "0.1.1"
 
 readme = "README.md"
 
@@ -22,8 +22,3 @@ license = "Apache-2.0"
 keywords = [ "SSH", "SSH Client", "SSH 客户端" ]
 
 description = "使用 MoonBit 实现的 SSH 客户端库"
-
-// Removed moonbitlang/async dependency to avoid MSVC requirement on Windows
-// import {
-//   "moonbitlang/async@0.19.2",
-// }

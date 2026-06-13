@@ -22,7 +22,7 @@ fn main {
   client.kex() catch {
     e => abort("kex: " + e.to_string())
   }
-  client.auth_password(password) catch {
+  client.auth_auto(password) catch {
     e => abort("auth: " + e.to_string())
   }
 
