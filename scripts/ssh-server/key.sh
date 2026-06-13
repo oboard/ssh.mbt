@@ -10,11 +10,11 @@ ssh-keygen -t ed25519 -N "" -f id_ed25519
 
 publickey=$(cat id_ed25519.pub)
 
-docker rm -f openssh-server_publickey
+docker rm -f openssh-server_key
 
 docker run -d \
-  --name=openssh-server_publickey \
-  --hostname=openssh-server_publickey \
+  --name=openssh-server_key \
+  --hostname=openssh-server_key \
   -e PUID=1000 \
   -e PGID=1000 \
   -e TZ=Etc/UTC \
