@@ -151,7 +151,9 @@ pub fn Client::auth_password(
 }
 
 ///|
-/// 公钥认证（two-step）。
+/// 公钥认证（two-step）。自动适配 ssh-rsa / ssh-ed25519。
+/// 私钥路径支持 PEM（PKCS#1/PKCS#8/传统）和 OpenSSH openssh-key-v1 格式。
+/// 对应的 .pub 文件必须是 OpenSSH 单行格式：`<alg> <base64> <comment>`。
 pub fn Client::auth_publickey(
   self : Client,
   private_key_path : String,
@@ -178,13 +180,29 @@ pub fn Client::auth_publickey(
   }
   defer pkey.close()
 
-  // 从私钥获取公钥 blob（简化：使用 PEM 公钥文件或构造）
-  // 对于 rsa-sha2-256，构造 public key blob
-  let pubkey_alg = "rsa-sha2-256"
-  // 加载对应的公钥
+  // 从 .pub 文件读取公钥 (alg, blob)
   let pubkey_path = private_key_path + ".pub"
-  let pubkey_blob = read_pubkey_blob(pubkey_path) catch {
-    _ => raise ProtocolError("auth: cannot read \{pubkey_path}")
+  let (pub_alg, pubkey_blob) = @crypto.read_openssh_pubkey(pubkey_path) catch {
+    e => raise ProtocolError("auth: read pubkey \{pubkey_path}: \{e}")
+  }
+
+  // 根据私钥类型决定签名算法
+  //   ed25519 -> md_alg = 0 (EdDSA, no pre-hash),  pubkey_alg = "ssh-ed25519"
+  //   rsa     -> md_alg = 2 (SHA-256),              pubkey_alg = "rsa-sha2-256"
+  let pubkey_alg : String = match pkey.key_id() {
+    1087 => "ssh-ed25519" // EVP_PKEY_ED25519
+    6 => "rsa-sha2-256" // EVP_PKEY_RSA
+    other => raise ProtocolError("auth: unsupported key type \{other}")
+  }
+  // 防止 .pub 文件声明的算法和私钥类型不匹配
+  if pub_alg != pubkey_alg {
+    raise ProtocolError(
+      "auth: pubkey file declares '\{pub_alg}' but private key is '\{pubkey_alg}'",
+    )
+  }
+  let md_alg : Int = match pkey.key_id() {
+    1087 => 0
+    _ => 2
   }
 
   // Step 1: 发送 publickey 查询（无签名）
@@ -206,7 +224,7 @@ pub fn Client::auth_publickey(
     pubkey_alg,
     pubkey_blob,
   )
-  let signature = pkey.sign(2, sig_input) catch { // 2 = SHA-256
+  let signature = pkey.sign(md_alg, sig_input) catch {
     e => raise ProtocolError("auth: sign: \{e}")
   }
 
@@ -841,11 +859,6 @@ fn compute_mac(client : Client, data : Bytes) -> Bytes raise SshError {
 }
 
 // ============== Helpers ==============
-
-///|
-fn read_pubkey_blob(path : String) -> Bytes raise SshError {
-  raise ProtocolError("pubkey file reading not available")
-}
 
 ///|
 fn build_signature_blob(alg : String, sig : Bytes) -> Bytes {

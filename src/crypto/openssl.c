@@ -62,6 +62,8 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, EVP_DigestUpdate, (EVP_MD_CTX *ctx, const void *d, size_t cnt)) \
   IMPORT_FUNC(int, EVP_DigestFinal_ex, (EVP_MD_CTX *ctx, unsigned char *md, unsigned int *s)) \
   IMPORT_FUNC(int, EVP_Digest, (const void *data, size_t count, unsigned char *md, unsigned int *size, const EVP_MD *type, ENGINE *impl)) \
+  IMPORT_FUNC(int, EVP_DigestSignInit, (EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_DigestSign, (EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen)) \
   /* cipher */ \
   IMPORT_FUNC(const EVP_CIPHER *, EVP_aes_128_ctr, (void)) \
   IMPORT_FUNC(EVP_CIPHER_CTX *, EVP_CIPHER_CTX_new, (void)) \
@@ -104,7 +106,9 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(EVP_PKEY *, EVP_PKEY_new, (void)) \
   IMPORT_FUNC(void, EVP_PKEY_free, (EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_size, (const EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_PKEY_get_id, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_octet_string_param, (const EVP_PKEY *pkey, const char *key_name, unsigned char *buf, size_t bufsize, size_t *written_len)) \
+  IMPORT_FUNC(int, EVP_PKEY_get_bn_param, (const EVP_PKEY *pkey, const char *key_name, BIGNUM **bn)) \
   IMPORT_FUNC(int, i2d_PUBKEY, (const EVP_PKEY *a, unsigned char **pp)) \
   IMPORT_FUNC(EVP_PKEY *, d2i_PUBKEY, (EVP_PKEY **a, const unsigned char **pp, long length)) \
   IMPORT_FUNC(int, i2d_PrivateKey, (EVP_PKEY *a, unsigned char **pp)) \
@@ -548,7 +552,23 @@ int moonbitlang_ssh_rsa_verify(void *pkey, int md_alg_id,
 /* ------------------------------------------------------------------ */
 /* PEM key loading                                                     */
 /* ------------------------------------------------------------------ */
-int moonbitlang_ssh_pem_read_private_key(const char *path, void **out) {
+/* Copy a MoonBit Bytes (path_bytes, path_len) into a stack-allocated
+ * NUL-terminated C string. MoonBit Bytes is not NUL-terminated so we
+ * must build a proper C string before passing to fopen/BIO_new_file.
+ * Caller-supplied buffer must have room for path_len+1 bytes.
+ * Returns 1 on success, 0 if path_len exceeds buf_cap-1. */
+static int copy_path_to_cstr(const char *path_bytes, int path_len,
+                             char *buf, int buf_cap) {
+  if (path_len < 0 || path_len + 1 > buf_cap) return 0;
+  memcpy(buf, path_bytes, (size_t)path_len);
+  buf[path_len] = '\0';
+  return 1;
+}
+
+int moonbitlang_ssh_pem_read_private_key(const char *path_bytes, int path_len,
+                                         void **out) {
+  char path[4096];
+  if (!copy_path_to_cstr(path_bytes, path_len, path, sizeof(path))) return 0;
   BIO *bio = BIO_new_file(path, "r");
   if (!bio) return 0;
   EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
@@ -558,7 +578,10 @@ int moonbitlang_ssh_pem_read_private_key(const char *path, void **out) {
   return 1;
 }
 
-int moonbitlang_ssh_pem_read_public_key(const char *path, void **out) {
+int moonbitlang_ssh_pem_read_public_key(const char *path_bytes, int path_len,
+                                        void **out) {
+  char path[4096];
+  if (!copy_path_to_cstr(path_bytes, path_len, path, sizeof(path))) return 0;
   BIO *bio = BIO_new_file(path, "r");
   if (!bio) return 0;
   EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, 0, 0, 0);
@@ -660,6 +683,508 @@ int moonbitlang_ssh_pkey_new_rsa(
 void *moonbitlang_ssh_pkey_new(void) { return EVP_PKEY_new(); }
 void moonbitlang_ssh_pkey_free(void *pkey) { if (pkey) EVP_PKEY_free((EVP_PKEY *)pkey); }
 int moonbitlang_ssh_pkey_size(void *pkey) { return EVP_PKEY_get_size((EVP_PKEY *)pkey); }
+int moonbitlang_ssh_pkey_id(void *pkey) {
+  return EVP_PKEY_get_id((const EVP_PKEY *)pkey);
+}
 int moonbitlang_ssh_i2d_pubkey(void *pkey, unsigned char **buf) {
   return i2d_PUBKEY((const EVP_PKEY *)pkey, buf);
+}
+int moonbitlang_ssh_pkey_get_octet_param(void *pkey, const char *name,
+                                         unsigned char *buf, int buf_len,
+                                         int *out_len) {
+  size_t written = 0;
+  int rc = EVP_PKEY_get_octet_string_param(
+    (const EVP_PKEY *)pkey, name, buf, (size_t)buf_len, &written);
+  if (rc != 1) return 0;
+  if (out_len) *out_len = (int)written;
+  return 1;
+}
+int moonbitlang_ssh_pkey_get_bn_bytes(void *pkey, const char *name,
+                                      unsigned char *buf, int buf_len,
+                                      int *out_len) {
+  BIGNUM *bn = 0;
+  if (EVP_PKEY_get_bn_param((const EVP_PKEY *)pkey, name, &bn) != 1) return 0;
+  if (!bn) return 0;
+  /* BN_num_bytes is a macro in OpenSSL 3.x; compute it inline. */
+  int n = (BN_num_bits(bn) + 7) / 8;
+  if (buf && buf_len >= n) {
+    BN_bn2bin(bn, buf);
+  } else {
+    BN_free(bn);
+    return 0;
+  }
+  BN_free(bn);
+  if (out_len) *out_len = n;
+  return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Generic private-key sign (works for both RSA and Ed25519)          */
+/*   md_alg_id = 0  -> Ed25519: uses EVP_DigestSign one-shot API.      */
+/*                     OpenSSL rejects EVP_PKEY_sign for EdDSA with    */
+/*                     "invalid eddsa instance for attempted operation"*/
+/*   md_alg_id = 1/2 -> EVP_PKEY_sign with SHA1/SHA256 (RSA PKCS#1)    */
+/* ------------------------------------------------------------------ */
+int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
+                              const unsigned char *tbs, int tbs_len,
+                              unsigned char *sig, int *sig_len) {
+  if (md_alg_id == 0) {
+    /* Ed25519 (and other "pure" EdDSA variants) must use the one-shot
+     * EVP_DigestSign path. No digest is set — OpenSSL pulls EdDSA's
+     * internal hash itself. */
+    EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+    if (!mctx) return 0;
+    int ok = 1;
+    if (EVP_DigestSignInit(mctx, 0, 0, 0, (EVP_PKEY *)pkey) <= 0) ok = 0;
+    size_t slen = (size_t)*sig_len;
+    if (ok && EVP_DigestSign(mctx, sig, &slen, tbs, (size_t)tbs_len) <= 0)
+      ok = 0;
+    if (ok) *sig_len = (int)slen;
+    EVP_MD_CTX_free(mctx);
+    return ok;
+  }
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)pkey, 0);
+  if (!ctx) return 0;
+  int ok = 1;
+  if (EVP_PKEY_sign_init(ctx) <= 0) ok = 0;
+  if (ok && EVP_PKEY_CTX_set_signature_md(ctx, md_by_id(md_alg_id)) <= 0)
+    ok = 0;
+  size_t slen = (size_t)*sig_len;
+  if (ok && EVP_PKEY_sign(ctx, sig, &slen, tbs, (size_t)tbs_len) <= 0) ok = 0;
+  if (ok) *sig_len = (int)slen;
+  EVP_PKEY_CTX_free(ctx);
+  return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base64 decoder (RFC 4648, standard alphabet)                       */
+/*   Strips whitespace, ignores trailing padding.                     */
+/*   Returns 1 on success, 0 on invalid input.                        */
+/* ------------------------------------------------------------------ */
+static const int b64_index[256] = {
+  ['A']=0,['B']=1,['C']=2,['D']=3,['E']=4,['F']=5,['G']=6,['H']=7,
+  ['I']=8,['J']=9,['K']=10,['L']=11,['M']=12,['N']=13,['O']=14,['P']=15,
+  ['Q']=16,['R']=17,['S']=18,['T']=19,['U']=20,['V']=21,['W']=22,['X']=23,
+  ['Y']=24,['Z']=25,
+  ['a']=26,['b']=27,['c']=28,['d']=29,['e']=30,['f']=31,['g']=32,['h']=33,
+  ['i']=34,['j']=35,['k']=36,['l']=37,['m']=38,['n']=39,['o']=40,['p']=41,
+  ['q']=42,['r']=43,['s']=44,['t']=45,['u']=46,['v']=47,['w']=48,['x']=49,
+  ['y']=50,['z']=51,
+  ['0']=52,['1']=53,['2']=54,['3']=55,['4']=56,['5']=57,['6']=58,['7']=59,
+  ['8']=60,['9']=61,
+  ['+']=62,['/']=63
+};
+
+int moonbitlang_ssh_base64_decode(const char *src, int src_len,
+                                  unsigned char *out, int *out_len) {
+  if (!src || src_len < 0 || !out || !out_len) return 0;
+  /* Collect 4 base64 chars -> 3 output bytes. '=' is the padding char. */
+  int olen = 0;
+  int quad[4];
+  int qi = 0;
+  for (int i = 0; i < src_len; i++) {
+    unsigned char c = (unsigned char)src[i];
+    if (c == '\n' || c == '\r' || c == ' ' || c == '\t') continue;
+    if (c == '=') {
+      quad[qi++] = -1;
+    } else {
+      int v = b64_index[c];
+      if (v == 0 && c != 'A') return 0; /* invalid char */
+      quad[qi++] = v;
+    }
+    if (qi == 4) {
+      int a = quad[0], b = quad[1], c2 = quad[2], d = quad[3];
+      if (a < 0 || b < 0) return 0;
+      out[olen++] = (unsigned char)((a << 2) | (b >> 4));
+      if (c2 >= 0) out[olen++] = (unsigned char)(((b & 0x0f) << 4) | (c2 >> 2));
+      if (d >= 0)  out[olen++] = (unsigned char)(((c2 & 0x03) << 6) | d);
+      qi = 0;
+    }
+  }
+  if (qi != 0) return 0; /* incomplete quad */
+  *out_len = olen;
+  return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* OpenSSH private key format decoder (PROTOCOL.key 2016/01/26)       */
+/*                                                                      */
+/* File format (after base64 decode):                                  */
+/*   "openssh-key-v1\0"  (15 bytes)                                    */
+/*   string  ciphername  (e.g. "none", "aes256-ctr")                   */
+/*   string  kdfname     (e.g. "none", "bcrypt")                       */
+/*   string  kdfoptions  (kdf params)                                  */
+/*   uint32  number_of_keys (N)                                        */
+/*   string  public_key_blob (the SSH wire-format pubkey, repeated N?) */
+/*   string  encrypted_private_data                                    */
+/*                                                                      */
+/* Inner encrypted_private_data layout (when cipher=none, plaintext):   */
+/*   uint32  checkint1                                                    */
+/*   uint32  checkint2  (must equal checkint1)                          */
+/*   <key-type-specific fields, repeated N times>                       */
+/*                                                                      */
+/* Supported inner key types:                                           */
+/*   "ssh-ed25519" -> pub (32), priv (64)                              */
+/*   "ssh-rsa"     -> n, e, d, iqmp, p, q, comment                     */
+/* ------------------------------------------------------------------ */
+
+/* Read a 4-byte big-endian uint32 at *pos, advancing *pos. */
+static int read_u32(const unsigned char *buf, int len, int *pos, uint32_t *out) {
+  if (*pos + 4 > len) return 0;
+  *out = ((uint32_t)buf[*pos] << 24) |
+         ((uint32_t)buf[*pos + 1] << 16) |
+         ((uint32_t)buf[*pos + 2] << 8) |
+         ((uint32_t)buf[*pos + 3]);
+  *pos += 4;
+  return 1;
+}
+
+/* Read an SSH "string" at *pos (uint32 length + payload). Writes the
+ * payload length to *out_len and (optionally) copies payload to out.
+ * Returns 1 on success. */
+static int read_ssh_string(const unsigned char *buf, int len, int *pos,
+                           unsigned char *out, int out_cap, int *out_len) {
+  uint32_t slen = 0;
+  if (!read_u32(buf, len, pos, &slen)) return 0;
+  if (*pos + (int)slen > len) return 0;
+  if (out && out_cap >= (int)slen) {
+    memcpy(out, buf + *pos, slen);
+  } else if (out) {
+    return 0;
+  }
+  *pos += (int)slen;
+  if (out_len) *out_len = (int)slen;
+  return 1;
+}
+
+/* Same as read_ssh_string, but uses a pointer instead of copying.
+ * If out or out_len is NULL, the corresponding value is not returned. */
+static int read_ssh_string_peek(const unsigned char *buf, int len, int *pos,
+                                const unsigned char **out, int *out_len) {
+  uint32_t slen = 0;
+  if (!read_u32(buf, len, pos, &slen)) return 0;
+  if (*pos + (int)slen > len) return 0;
+  if (out) *out = buf + *pos;
+  if (out_len) *out_len = (int)slen;
+  *pos += (int)slen;
+  return 1;
+}
+
+/* Build an ed25519 EVP_PKEY from a 32-byte public key and a 32-byte
+ * private seed (OpenSSH stores the 64-byte form pub||seed; we split it
+ * before calling). */
+static EVP_PKEY *build_ed25519_pkey(const unsigned char *pub32,
+                                    const unsigned char *seed32) {
+  EVP_PKEY *pkey = 0;
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, "ED25519", 0);
+  if (!ctx) return 0;
+  void *bld = OSSL_PARAM_BLD_new();
+  if (!bld) { EVP_PKEY_CTX_free(ctx); return 0; }
+  OSSL_PARAM_BLD_push_octet_string(bld, "pub", pub32, 32);
+  OSSL_PARAM_BLD_push_octet_string(bld, "priv", seed32, 32);
+  const void *params = OSSL_PARAM_BLD_to_param(bld);
+  OSSL_PARAM_BLD_free(bld);
+  if (!params) { EVP_PKEY_CTX_free(ctx); return 0; }
+  if (EVP_PKEY_fromdata_init(ctx) <= 0) {
+    EVP_PKEY_CTX_free(ctx);
+    return 0;
+  }
+  if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) <= 0) {
+    EVP_PKEY_CTX_free(ctx);
+    return 0;
+  }
+  EVP_PKEY_CTX_free(ctx);
+  return pkey;
+}
+
+/* Build an RSA EVP_PKEY from raw n/e/d byte strings. */
+static EVP_PKEY *build_rsa_pkey(const unsigned char *n, int n_len,
+                                const unsigned char *e, int e_len,
+                                const unsigned char *d, int d_len) {
+  BIGNUM *bn_n = BN_bin2bn(n, n_len, 0);
+  BIGNUM *bn_e = BN_bin2bn(e, e_len, 0);
+  BIGNUM *bn_d = BN_bin2bn(d, d_len, 0);
+  if (!bn_n || !bn_e || !bn_d) {
+    if (bn_n) BN_free(bn_n);
+    if (bn_e) BN_free(bn_e);
+    if (bn_d) BN_free(bn_d);
+    return 0;
+  }
+  void *bld = OSSL_PARAM_BLD_new();
+  if (!bld) { BN_free(bn_n); BN_free(bn_e); BN_free(bn_d); return 0; }
+  OSSL_PARAM_BLD_push_BN(bld, "n", bn_n);
+  OSSL_PARAM_BLD_push_BN(bld, "e", bn_e);
+  OSSL_PARAM_BLD_push_BN(bld, "d", bn_d);
+  const void *params = OSSL_PARAM_BLD_to_param(bld);
+  OSSL_PARAM_BLD_free(bld);
+  if (!params) { BN_free(bn_n); BN_free(bn_e); BN_free(bn_d); return 0; }
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, "RSA", 0);
+  if (!ctx) { BN_free(bn_n); BN_free(bn_e); BN_free(bn_d); return 0; }
+  EVP_PKEY *pkey = 0;
+  if (EVP_PKEY_fromdata_init(ctx) <= 0 ||
+      EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) <= 0) {
+    EVP_PKEY_CTX_free(ctx);
+    BN_free(bn_n); BN_free(bn_e); BN_free(bn_d);
+    if (pkey) EVP_PKEY_free(pkey);
+    return 0;
+  }
+  EVP_PKEY_CTX_free(ctx);
+  BN_free(bn_n); BN_free(bn_e); BN_free(bn_d);
+  return pkey;
+}
+
+/* Decode a single OpenSSH-format private key blob (the plaintext form
+ * stored inside openssh-key-v1). Produces an EVP_PKEY. */
+static EVP_PKEY *openssh_decode_plain(const unsigned char *enc, int enc_len) {
+  int pos = 0;
+  uint32_t check1 = 0, check2 = 0;
+  if (!read_u32(enc, enc_len, &pos, &check1)) return 0;
+  if (!read_u32(enc, enc_len, &pos, &check2)) return 0;
+  if (check1 != check2) return 0;
+  /* keytype string */
+  char keytype[64];
+  int ktype_len = 0;
+  if (!read_ssh_string(enc, enc_len, &pos, (unsigned char *)keytype,
+                       sizeof(keytype) - 1, &ktype_len)) return 0;
+  keytype[ktype_len] = '\0';
+  if (strcmp(keytype, "ssh-ed25519") == 0) {
+    /* pub (32), priv (64 = 32 pub + 32 seed), comment */
+    unsigned char pub32[32];
+    unsigned char priv64[64];
+    int pub_len = 0, priv_len = 0;
+    if (!read_ssh_string(enc, enc_len, &pos, pub32, sizeof(pub32), &pub_len))
+      return 0;
+    if (pub_len != 32) return 0;
+    if (!read_ssh_string(enc, enc_len, &pos, priv64, sizeof(priv64), &priv_len))
+      return 0;
+    if (priv_len != 64) return 0;
+    /* OpenSSH ed25519 stores private as seed (32) || public_key (32).
+     * The last 32 bytes of the 64-byte blob must equal the public key. */
+    if (memcmp(priv64 + 32, pub32, 32) != 0) return 0;
+    return build_ed25519_pkey(pub32, priv64);
+  } else if (strcmp(keytype, "ssh-rsa") == 0) {
+    /* n, e, d, iqmp, p, q, comment */
+    unsigned char *n = 0, *e = 0, *d = 0, *iqmp = 0, *p = 0, *q = 0;
+    int n_len = 0, e_len = 0, d_len = 0, iqmp_len = 0, p_len = 0, q_len = 0;
+    const unsigned char *p_view = 0;
+    int vlen = 0;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) return 0;
+    n = (unsigned char *)malloc((size_t)vlen);
+    memcpy(n, p_view, (size_t)vlen);
+    n_len = vlen;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); return 0;
+    }
+    e = (unsigned char *)malloc((size_t)vlen);
+    memcpy(e, p_view, (size_t)vlen);
+    e_len = vlen;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); free(e); return 0;
+    }
+    d = (unsigned char *)malloc((size_t)vlen);
+    memcpy(d, p_view, (size_t)vlen);
+    d_len = vlen;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); free(e); free(d); return 0;
+    }
+    iqmp = (unsigned char *)malloc((size_t)vlen);
+    memcpy(iqmp, p_view, (size_t)vlen);
+    iqmp_len = vlen;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); free(e); free(d); free(iqmp); return 0;
+    }
+    p = (unsigned char *)malloc((size_t)vlen);
+    memcpy(p, p_view, (size_t)vlen);
+    p_len = vlen;
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); free(e); free(d); free(iqmp); free(p); return 0;
+    }
+    q = (unsigned char *)malloc((size_t)vlen);
+    memcpy(q, p_view, (size_t)vlen);
+    q_len = vlen;
+    /* comment (string) — we don't need it */
+    if (!read_ssh_string_peek(enc, enc_len, &pos, &p_view, &vlen)) {
+      free(n); free(e); free(d); free(iqmp); free(p); free(q); return 0;
+    }
+    EVP_PKEY *pkey = build_rsa_pkey(n, n_len, e, e_len, d, d_len);
+    free(n); free(e); free(d); free(iqmp); free(p); free(q);
+    return pkey;
+  }
+  return 0;
+}
+
+int moonbitlang_ssh_load_openssh_private_key(const unsigned char *enc,
+                                              int enc_len, void **out) {
+  if (!enc || enc_len < 15) { *out = 0; return 0; }
+  if (memcmp(enc, "openssh-key-v1", 14) != 0) { *out = 0; return 0; }
+  int pos = 15; /* skip magic + NUL */
+  /* ciphername, kdfname, kdfoptions (3 strings) */
+  if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) { *out = 0; return 0; }
+  if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) { *out = 0; return 0; }
+  if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) { *out = 0; return 0; }
+  /* number of keys (uint32) */
+  uint32_t nkeys = 0;
+  if (!read_u32(enc, enc_len, &pos, &nkeys)) { *out = 0; return 0; }
+  if (nkeys < 1) { *out = 0; return 0; }
+  /* public key blob (one per key) — skip them */
+  for (uint32_t i = 0; i < nkeys; i++) {
+    if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) { *out = 0; return 0; }
+  }
+  /* encrypted private data */
+  const unsigned char *priv = 0;
+  int priv_len = 0;
+  if (!read_ssh_string_peek(enc, enc_len, &pos, &priv, &priv_len)) {
+    *out = 0; return 0;
+  }
+  /* We only support unencrypted (cipher=none, kdf=none) keys. The caller
+   * is responsible for not invoking us on a passphrase-protected key. */
+  EVP_PKEY *pkey = openssh_decode_plain(priv, priv_len);
+  if (!pkey) { *out = 0; return 0; }
+  *out = pkey;
+  return 1;
+}
+
+/* Read the entire file into a heap-allocated buffer. Caller frees. */
+static int read_whole_file(const char *path, unsigned char **out_buf,
+                           int *out_len) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+  long sz = ftell(f);
+  if (sz < 0) { fclose(f); return 0; }
+  if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+  unsigned char *buf = (unsigned char *)malloc((size_t)sz);
+  if (!buf) { fclose(f); return 0; }
+  size_t got = fread(buf, 1, (size_t)sz, f);
+  fclose(f);
+  if ((long)got != sz) { free(buf); return 0; }
+  *out_buf = buf;
+  *out_len = (int)sz;
+  return 1;
+}
+
+int moonbitlang_ssh_load_private_key(const char *path_bytes, int path_len,
+                                     void **out) {
+  char path[4096];
+  if (!copy_path_to_cstr(path_bytes, path_len, path, sizeof(path))) return 0;
+  unsigned char *raw = 0;
+  int raw_len = 0;
+  if (!read_whole_file(path, &raw, &raw_len)) return 0;
+  /* Detect format by the PEM/OpenSSH armor header. */
+  int is_openssh = 0;
+  int is_pem = 0;
+  /* We scan up to 200 bytes of header for the BEGIN line. */
+  int scan_len = raw_len < 200 ? raw_len : 200;
+  for (int i = 0; i + 32 < scan_len; i++) {
+    if (memcmp(raw + i, "-----BEGIN OPENSSH PRIVATE KEY-----", 35) == 0) {
+      is_openssh = 1;
+      break;
+    }
+    if (memcmp(raw + i, "-----BEGIN ", 11) == 0) {
+      is_pem = 1;
+      break;
+    }
+  }
+  int rc = 0;
+  if (is_openssh) {
+    /* Collect base64 payload between BEGIN/END markers. */
+    unsigned char *b64 = (unsigned char *)malloc((size_t)raw_len);
+    if (!b64) { free(raw); return 0; }
+    int b64_len = 0;
+    int state = 0; /* 0=before BEGIN, 1=inside, 2=after END */
+    for (int i = 0; i < raw_len; i++) {
+      if (state == 0) {
+        if (memcmp(raw + i, "-----BEGIN OPENSSH PRIVATE KEY-----", 35) == 0) {
+          state = 1;
+          /* advance past the BEGIN line */
+          while (i < raw_len && raw[i] != '\n') i++;
+        }
+      } else if (state == 1) {
+        if (memcmp(raw + i, "-----END OPENSSH PRIVATE KEY-----", 32) == 0) {
+          state = 2;
+        } else {
+          b64[b64_len++] = raw[i];
+        }
+      }
+    }
+    unsigned char *decoded = (unsigned char *)malloc((size_t)b64_len);
+    if (!decoded) { free(b64); free(raw); return 0; }
+    int decoded_len = 0;
+    if (!moonbitlang_ssh_base64_decode((const char *)b64, b64_len,
+                                       decoded, &decoded_len)) {
+      free(b64); free(decoded); free(raw); return 0;
+    }
+    free(b64);
+    rc = moonbitlang_ssh_load_openssh_private_key(decoded, decoded_len, out);
+    free(decoded);
+  } else if (is_pem) {
+    /* Hand the raw PEM text to OpenSSL via a memory BIO. */
+    BIO *bio = BIO_new_mem_buf(raw, raw_len);
+    if (bio) {
+      EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
+      BIO_free(bio);
+      if (pkey) { *out = pkey; rc = 1; }
+    }
+  }
+  free(raw);
+  return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* OpenSSH .pub file reader                                            */
+/*                                                                      */
+/* Parses the single-line OpenSSH public key file:                     */
+/*   <algorithm> <base64-blob> <comment>                                */
+/* where the base64-blob is the SSH wire-format pubkey (i.e. exactly   */
+/* the same bytes that go into SSH_MSG_USERAUTH_REQUEST for "publickey").*/
+/*                                                                      */
+/* On success returns 1 and writes:                                     */
+/*   - alg_buf: the algorithm name (e.g. "ssh-ed25519", "ssh-rsa")      */
+/*   - alg_len: length of alg_buf                                       */
+/*   - blob: the SSH wire-format pubkey blob                           */
+/*   - blob_len: length of blob                                         */
+/* ------------------------------------------------------------------ */
+int moonbitlang_ssh_read_openssh_pubkey(const char *path_bytes, int path_len,
+                                        char *alg_buf, int alg_cap, int *alg_len,
+                                        unsigned char *blob, int blob_cap,
+                                        int *blob_len) {
+  char path[4096];
+  if (!copy_path_to_cstr(path_bytes, path_len, path, sizeof(path))) return 0;
+  unsigned char *raw = 0;
+  int raw_len = 0;
+  if (!read_whole_file(path, &raw, &raw_len)) return 0;
+  /* Find the first whitespace-separated token. */
+  int tok_start = 0;
+  while (tok_start < raw_len && (raw[tok_start] == ' ' || raw[tok_start] == '\t'))
+    tok_start++;
+  int tok_end = tok_start;
+  while (tok_end < raw_len && raw[tok_end] != ' ' && raw[tok_end] != '\t' &&
+         raw[tok_end] != '\n' && raw[tok_end] != '\r')
+    tok_end++;
+  if (tok_end == tok_start) { free(raw); return 0; }
+  int alg_name_len = tok_end - tok_start;
+  if (alg_name_len + 1 > alg_cap) { free(raw); return 0; }
+  memcpy(alg_buf, raw + tok_start, (size_t)alg_name_len);
+  alg_buf[alg_name_len] = '\0';
+  if (alg_len) *alg_len = alg_name_len;
+  /* Find the second token: the base64 blob. */
+  int b64_start = tok_end;
+  while (b64_start < raw_len && (raw[b64_start] == ' ' || raw[b64_start] == '\t'))
+    b64_start++;
+  int b64_end = b64_start;
+  while (b64_end < raw_len && raw[b64_end] != ' ' && raw[b64_end] != '\t' &&
+         raw[b64_end] != '\n' && raw[b64_end] != '\r')
+    b64_end++;
+  if (b64_end == b64_start) { free(raw); return 0; }
+  int b64_len = b64_end - b64_start;
+  if (blob_cap < b64_len) { free(raw); return 0; }
+  int out_len = blob_cap;
+  if (!moonbitlang_ssh_base64_decode((const char *)(raw + b64_start),
+                                     b64_len, blob, &out_len)) {
+    free(raw);
+    return 0;
+  }
+  if (blob_len) *blob_len = out_len;
+  free(raw);
+  return 1;
 }
