@@ -66,6 +66,8 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, EVP_Digest, (const void *data, size_t count, unsigned char *md, unsigned int *size, const EVP_MD *type, ENGINE *impl)) \
   IMPORT_FUNC(int, EVP_DigestSignInit, (EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_DigestSign, (EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen)) \
+  IMPORT_FUNC(int, EVP_DigestVerifyInit, (EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)) \
+  IMPORT_FUNC(int, EVP_DigestVerify, (EVP_MD_CTX *ctx, const unsigned char *sig, size_t siglen, const unsigned char *tbs, size_t tbslen)) \
   /* cipher */ \
   IMPORT_FUNC(const EVP_CIPHER *, EVP_aes_128_ctr, (void)) \
   IMPORT_FUNC(EVP_CIPHER_CTX *, EVP_CIPHER_CTX_new, (void)) \
