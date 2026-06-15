@@ -1,14 +1,6 @@
 ///|
-/// MoonSSH 命令行客户端 — 公钥认证版本。
-///
-/// 用法：
-///   moonssh-key user@host [-p port] [-l user] [--key PATH] [--exec CMD] [--debug]
-///
-/// 环境变量：
-///   MOONBIT_CLI_ARGS  —— 传给程序的命令行（与 cmd/main 一致）
-///   MOONBIT_SSH_DEBUG —— "1"/"true" 启用 @src debug
+/// MoonSSH 命令行客户端 — ECDSA 公钥认证版本。
 fn main {
-  // 检查环境变量 MOONBIT_SSH_DEBUG
   let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
   if env_debug == "1" || env_debug == "true" {
     @src.enable_debug()
@@ -17,7 +9,7 @@ fn main {
   let argv = get_argv()
   if argv.length() == 0 {
     println(
-      "usage: moonssh-key user@host [-p port] [-l user] [--key PATH] [--exec CMD] [--debug]",
+      "usage: moonssh-key-ecdsa user@host [-p port] [-l user] [--key PATH] [--exec CMD] [--debug]",
     )
     abort("no arguments")
   }
@@ -29,7 +21,6 @@ fn main {
   client.kex() catch {
     e => abort("kex: " + e.to_string())
   }
-  // 公钥认证（two-step：先查询，服务端 PK_OK 后再签名）
   client.auth_publickey(key_path) catch {
     e => abort("auth: " + e.to_string())
   }
@@ -47,9 +38,6 @@ fn main {
 }
 
 ///|
-/// 简单的命令行参数 tokenizer，支持单引号和双引号。
-/// 例如：`user@host --exec 'uname -a' --key ~/.ssh/id_rsa`
-/// 解析为：["user@host", "--exec", "uname -a", "--key", "~/.ssh/id_rsa"]
 fn tokenize_args(s : String) -> Array[String] {
   let arr = s.to_array()
   let mut i = 0
@@ -59,7 +47,6 @@ fn tokenize_args(s : String) -> Array[String] {
     if c == ' ' || c == '\t' {
       i = i + 1
     } else if c == '\'' {
-      // 单引号：读取直到下一个单引号
       i = i + 1
       let mut buf = ""
       while i < arr.length() && arr.unsafe_get(i) != '\'' {
@@ -68,10 +55,9 @@ fn tokenize_args(s : String) -> Array[String] {
       }
       if i < arr.length() {
         i = i + 1
-      } // 跳过结束引号
+      }
       result.push(buf)
     } else if c == '"' {
-      // 双引号：读取直到下一个双引号
       i = i + 1
       let mut buf = ""
       while i < arr.length() && arr.unsafe_get(i) != '"' {
@@ -80,10 +66,9 @@ fn tokenize_args(s : String) -> Array[String] {
       }
       if i < arr.length() {
         i = i + 1
-      } // 跳过结束引号
+      }
       result.push(buf)
     } else {
-      // 普通字符：读取直到空格
       let mut buf = ""
       while i < arr.length() &&
             arr.unsafe_get(i) != ' ' &&
@@ -116,7 +101,7 @@ fn parse_args(argv : Array[String]) -> (@src.ConnectOptions, String, String) {
   let (tmp_user, host) = split_user_host(userhost)
   let mut result_user = tmp_user
   let mut port = 22
-  let mut key_path = "~/.ssh/id_rsa"
+  let mut key_path = "~/.ssh/id_ecdsa"
   let mut command = "uname -a"
   let mut i = 1
   while i < argv.length() {

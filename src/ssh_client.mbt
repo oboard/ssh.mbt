@@ -187,11 +187,20 @@ pub fn Client::auth_publickey(
   }
 
   // 根据私钥类型决定签名算法
-  //   ed25519 -> md_alg = 0 (EdDSA, no pre-hash),  pubkey_alg = "ssh-ed25519"
-  //   rsa     -> md_alg = 2 (SHA-256),              pubkey_alg = "rsa-sha2-256"
-  let pubkey_alg : String = match pkey.key_id() {
-    1087 => "ssh-ed25519" // EVP_PKEY_ED25519
-    6 => "rsa-sha2-256" // EVP_PKEY_RSA
+  let (pubkey_alg, md_alg) : (String, Int) = match pkey.key_id() {
+    1087 => ("ssh-ed25519", 0) // EdDSA, no pre-hash
+    6 => ("rsa-sha2-256", 2) // RSA + SHA-256
+    116 => ("ssh-dss", 1) // DSA + SHA-1
+    408 => {
+      // ECDSA: 根据曲线 NID 决定算法名和 digest
+      let nid = pkey.ec_curve_nid()
+      match nid {
+        415 => ("ecdsa-sha2-nistp256", 2) // P-256 + SHA-256
+        715 => ("ecdsa-sha2-nistp384", 3) // P-384 + SHA-384
+        716 => ("ecdsa-sha2-nistp521", 4) // P-521 + SHA-521
+        _ => raise ProtocolError("auth: unknown EC curve NID \{nid}")
+      }
+    }
     other => raise ProtocolError("auth: unsupported key type \{other}")
   }
   // 防止 .pub 文件声明的算法和私钥类型不匹配
@@ -199,10 +208,6 @@ pub fn Client::auth_publickey(
     raise ProtocolError(
       "auth: pubkey file declares '\{pub_alg}' but private key is '\{pubkey_alg}'",
     )
-  }
-  let md_alg : Int = match pkey.key_id() {
-    1087 => 0
-    _ => 2
   }
 
   // Step 1: 发送 publickey 查询（无签名）

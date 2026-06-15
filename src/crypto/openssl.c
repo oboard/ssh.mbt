@@ -56,6 +56,8 @@ typedef struct rsa_st RSA;
   /* digest */ \
   IMPORT_FUNC(const EVP_MD *, EVP_sha1, (void)) \
   IMPORT_FUNC(const EVP_MD *, EVP_sha256, (void)) \
+  IMPORT_FUNC(const EVP_MD *, EVP_sha384, (void)) \
+  IMPORT_FUNC(const EVP_MD *, EVP_sha521, (void)) \
   IMPORT_FUNC(EVP_MD_CTX *, EVP_MD_CTX_new, (void)) \
   IMPORT_FUNC(void, EVP_MD_CTX_free, (EVP_MD_CTX *ctx)) \
   IMPORT_FUNC(int, EVP_DigestInit_ex, (EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)) \
@@ -108,6 +110,7 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, EVP_PKEY_get_size, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_id, (const EVP_PKEY *pkey)) \
   IMPORT_FUNC(int, EVP_PKEY_get_octet_string_param, (const EVP_PKEY *pkey, const char *key_name, unsigned char *buf, size_t bufsize, size_t *written_len)) \
+  IMPORT_FUNC(int, EVP_PKEY_get_utf8_string_param, (const EVP_PKEY *pkey, const char *key_name, char *buf, size_t bufsize, size_t *written_len)) \
   IMPORT_FUNC(int, EVP_PKEY_get_bn_param, (const EVP_PKEY *pkey, const char *key_name, BIGNUM **bn)) \
   IMPORT_FUNC(int, i2d_PUBKEY, (const EVP_PKEY *a, unsigned char **pp)) \
   IMPORT_FUNC(EVP_PKEY *, d2i_PUBKEY, (EVP_PKEY **a, const unsigned char **pp, long length)) \
@@ -225,12 +228,14 @@ static const EVP_MD *md_by_id(int alg_id) {
   switch (alg_id) {
     case 1: return EVP_sha1();
     case 2: return EVP_sha256();
+    case 3: return EVP_sha384();
+    case 4: return EVP_sha521();
     default: return 0;
   }
 }
 
 int moonbitlang_ssh_md_size(int alg_id) {
-  switch (alg_id) { case 1: return 20; case 2: return 32; default: return 0; }
+  switch (alg_id) { case 1: return 20; case 2: return 32; case 3: return 48; case 4: return 64; default: return 0; }
 }
 
 int moonbitlang_ssh_md_init(void *ctx, int alg_id) {
@@ -405,20 +410,58 @@ static int extract_raw_ec_point(const unsigned char *spki, int spki_len,
  */
 static int wrap_raw_point_in_spki(const unsigned char *raw, int raw_len,
                                   unsigned char *out, int out_cap) {
-  /* Only P-256 raw points are supported (65 bytes: 04 || x || y) */
-  if (raw_len != 65) return 0;
-  if (out_cap < 91) return 0;
-  const unsigned char spki_prefix[] = {
-    0x30, 0x59,                                           /* SEQUENCE (89) */
-      0x30, 0x13,                                         /* SEQUENCE (19) */
-        0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, /* ecPublicKey */
-        0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, /* secp256r1 */
-      0x03, 0x42,                                         /* BIT STRING (66) */
-        0x00                                              /* unused bits */
-  };
-  memcpy(out, spki_prefix, sizeof(spki_prefix));
-  memcpy(out + sizeof(spki_prefix), raw, (size_t)raw_len);
-  return (int)(sizeof(spki_prefix) + raw_len);
+  /* P-256: 65 bytes -> SPKI 91 bytes
+   * P-384: 97 bytes -> SPKI 123 bytes
+   * P-521: 133 bytes -> SPKI 159 bytes */
+  /* AlgorithmIdentifier is always 19 bytes: SEQUENCE(13) + ecPublicKey OID(8) + curve OID(10) */
+  /* But the outer lengths and BIT STRING length change per curve */
+  int alg_id_len = 19; /* inner SEQUENCE content length */
+  int bit_string_content_len = 1 + raw_len; /* unused_bits_byte + raw point */
+  int bit_string_len = bit_string_content_len;
+  int outer_content_len = 2 + alg_id_len + 2 + bit_string_len;
+  int total_len = 2 + outer_content_len;
+
+  if (out_cap < total_len) return 0;
+
+  const unsigned char *curve_oid;
+  int curve_oid_len;
+  if (raw_len == 65) {
+    /* secp256r1: 06 08 2a 86 48 ce 3d 03 01 07 */
+    static const unsigned char oid_p256[] = {0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07};
+    curve_oid = oid_p256; curve_oid_len = 10;
+  } else if (raw_len == 97) {
+    /* secp384r1: 06 05 2b 81 04 00 22 */
+    static const unsigned char oid_p384[] = {0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22};
+    curve_oid = oid_p384; curve_oid_len = 7;
+  } else if (raw_len == 133) {
+    /* secp521r1: 06 05 2b 81 04 00 23 */
+    static const unsigned char oid_p521[] = {0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23};
+    curve_oid = oid_p521; curve_oid_len = 7;
+  } else {
+    return 0;
+  }
+
+  int pos = 0;
+  /* Outer SEQUENCE */
+  out[pos++] = 0x30;
+  out[pos++] = (unsigned char)outer_content_len;
+  /* Inner SEQUENCE (AlgorithmIdentifier) */
+  out[pos++] = 0x30;
+  out[pos++] = (unsigned char)alg_id_len;
+  /* ecPublicKey OID */
+  out[pos++] = 0x06; out[pos++] = 0x07;
+  out[pos++] = 0x2a; out[pos++] = 0x86; out[pos++] = 0x48;
+  out[pos++] = 0xce; out[pos++] = 0x3d; out[pos++] = 0x02; out[pos++] = 0x01;
+  /* Curve OID */
+  memcpy(out + pos, curve_oid, (size_t)curve_oid_len);
+  pos += curve_oid_len;
+  /* BIT STRING */
+  out[pos++] = 0x03;
+  out[pos++] = (unsigned char)bit_string_len;
+  out[pos++] = 0x00; /* unused bits */
+  memcpy(out + pos, raw, (size_t)raw_len);
+  pos += raw_len;
+  return pos;
 }
 
 /*
@@ -719,6 +762,88 @@ int moonbitlang_ssh_pkey_get_bn_bytes(void *pkey, const char *name,
 }
 
 /* ------------------------------------------------------------------ */
+/* ECDSA signature format conversion                                  */
+/*   SSH wire format: r || s (each zero-padded to key_size bytes)     */
+/*   OpenSSL format:  DER SEQUENCE { INTEGER r, INTEGER s }           */
+/* ------------------------------------------------------------------ */
+
+/* Convert DER ECDSA signature to SSH raw r||s format.
+ * Returns total bytes written (key_size * 2), or 0 on failure. */
+static int ecdsa_der_to_raw(const unsigned char *der, int der_len,
+                            unsigned char *out, int out_cap, int key_size) {
+  if (out_cap < key_size * 2) return 0;
+  int pos = 0;
+  /* SEQUENCE tag */
+  if (pos >= der_len || der[pos] != 0x30) return 0; pos++;
+  if (pos >= der_len) return 0;
+  int seq_len = der[pos]; pos++;
+  if (pos + seq_len > der_len) return 0;
+  /* INTEGER r */
+  if (pos >= der_len || der[pos] != 0x02) return 0; pos++;
+  if (pos >= der_len) return 0;
+  int r_len = der[pos]; pos++;
+  if (pos + r_len > der_len) return 0;
+  /* skip leading zero */
+  const unsigned char *r_bytes = der + pos;
+  int r_real = r_len;
+  while (r_real > key_size && *r_bytes == 0x00) { r_bytes++; r_real--; }
+  if (r_real > key_size) return 0;
+  memset(out, 0, (size_t)key_size);
+  memcpy(out + key_size - r_real, r_bytes, (size_t)r_real);
+  pos += r_len;
+  /* INTEGER s */
+  if (pos >= der_len || der[pos] != 0x02) return 0; pos++;
+  if (pos >= der_len) return 0;
+  int s_len = der[pos]; pos++;
+  if (pos + s_len > der_len) return 0;
+  const unsigned char *s_bytes = der + pos;
+  int s_real = s_len;
+  while (s_real > key_size && *s_bytes == 0x00) { s_bytes++; s_real--; }
+  if (s_real > key_size) return 0;
+  memset(out + key_size, 0, (size_t)key_size);
+  memcpy(out + key_size + key_size - s_real, s_bytes, (size_t)s_real);
+  return key_size * 2;
+}
+
+/* Convert SSH raw r||s signature to DER format.
+ * Returns bytes written, or 0 on failure. */
+static int ecdsa_raw_to_der(const unsigned char *raw, int raw_len,
+                            unsigned char *out, int out_cap) {
+  int key_size = raw_len / 2;
+  if (raw_len != key_size * 2 || out_cap < raw_len + 8) return 0;
+  const unsigned char *r = raw;
+  const unsigned char *s = raw + key_size;
+  /* strip leading zeros */
+  int r_off = 0;
+  while (r_off < key_size - 1 && r[r_off] == 0x00) r_off++;
+  int s_off = 0;
+  while (s_off < key_size - 1 && s[s_off] == 0x00) s_off++;
+  int r_len = key_size - r_off;
+  int s_len = key_size - s_off;
+  int r_need_zero = (r[r_off] & 0x80) ? 1 : 0;
+  int s_need_zero = (s[s_off] & 0x80) ? 1 : 0;
+  int r_int_len = r_len + r_need_zero;
+  int s_int_len = s_len + s_need_zero;
+  int seq_len = 2 + r_int_len + 2 + s_int_len;
+  int pos = 0;
+  out[pos++] = 0x30;
+  out[pos++] = (unsigned char)seq_len;
+  /* INTEGER r */
+  out[pos++] = 0x02;
+  out[pos++] = (unsigned char)r_int_len;
+  if (r_need_zero) out[pos++] = 0x00;
+  memcpy(out + pos, r + r_off, (size_t)r_len);
+  pos += r_len;
+  /* INTEGER s */
+  out[pos++] = 0x02;
+  out[pos++] = (unsigned char)s_int_len;
+  if (s_need_zero) out[pos++] = 0x00;
+  memcpy(out + pos, s + s_off, (size_t)s_len);
+  pos += s_len;
+  return pos;
+}
+
+/* ------------------------------------------------------------------ */
 /* Generic private-key sign (works for both RSA and Ed25519)          */
 /*   md_alg_id = 0  -> Ed25519: uses EVP_DigestSign one-shot API.      */
 /*                     OpenSSL rejects EVP_PKEY_sign for EdDSA with    */
@@ -728,10 +853,10 @@ int moonbitlang_ssh_pkey_get_bn_bytes(void *pkey, const char *name,
 int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
                               const unsigned char *tbs, int tbs_len,
                               unsigned char *sig, int *sig_len) {
-  if (md_alg_id == 0) {
-    /* Ed25519 (and other "pure" EdDSA variants) must use the one-shot
-     * EVP_DigestSign path. No digest is set — OpenSSL pulls EdDSA's
-     * internal hash itself. */
+  int key_type = EVP_PKEY_get_id((EVP_PKEY *)pkey);
+
+  if (key_type == 1087) {
+    /* Ed25519: one-shot EVP_DigestSign, no digest */
     EVP_MD_CTX *mctx = EVP_MD_CTX_new();
     if (!mctx) return 0;
     int ok = 1;
@@ -743,6 +868,52 @@ int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
     EVP_MD_CTX_free(mctx);
     return ok;
   }
+
+  if (key_type == 408) {
+    /* ECDSA: EVP_DigestSign with appropriate digest, then DER→raw */
+    const EVP_MD *md = md_by_id(md_alg_id);
+    if (!md) return 0;
+    EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+    if (!mctx) return 0;
+    int ok = 1;
+    if (EVP_DigestSignInit(mctx, 0, md, 0, (EVP_PKEY *)pkey) <= 0) ok = 0;
+    /* First call to get DER signature size */
+    size_t der_len = 0;
+    if (ok && EVP_DigestSign(mctx, 0, &der_len, tbs, (size_t)tbs_len) <= 0) ok = 0;
+    unsigned char der_sig[512];
+    if (ok && der_len > sizeof(der_sig)) ok = 0;
+    if (ok && EVP_DigestSign(mctx, der_sig, &der_len, tbs, (size_t)tbs_len) <= 0) ok = 0;
+    EVP_MD_CTX_free(mctx);
+    if (!ok) return 0;
+    /* Determine key size from the curve */
+    int key_size = (int)(der_len / 3); /* rough estimate; use max */
+    /* Try known sizes: P-256=32, P-384=48, P-521=66 */
+    if (*sig_len >= 64 && der_len <= 72) key_size = 32;       /* P-256 */
+    else if (*sig_len >= 96 && der_len <= 104) key_size = 48;  /* P-384 */
+    else if (*sig_len >= 132 && der_len <= 140) key_size = 66; /* P-521 */
+    else key_size = *sig_len / 2;
+    int raw_len = ecdsa_der_to_raw(der_sig, (int)der_len, sig, *sig_len, key_size);
+    if (raw_len <= 0) return 0;
+    *sig_len = raw_len;
+    return 1;
+  }
+
+  if (key_type == 116) {
+    /* DSA: EVP_DigestSign with SHA-1 */
+    const EVP_MD *md = md_by_id(md_alg_id);
+    if (!md) md = EVP_sha1();
+    EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+    if (!mctx) return 0;
+    int ok = 1;
+    if (EVP_DigestSignInit(mctx, 0, md, 0, (EVP_PKEY *)pkey) <= 0) ok = 0;
+    size_t slen = (size_t)*sig_len;
+    if (ok && EVP_DigestSign(mctx, sig, &slen, tbs, (size_t)tbs_len) <= 0) ok = 0;
+    if (ok) *sig_len = (int)slen;
+    EVP_MD_CTX_free(mctx);
+    return ok;
+  }
+
+  /* RSA: EVP_PKEY_sign with digest */
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)pkey, 0);
   if (!ctx) return 0;
   int ok = 1;
@@ -933,6 +1104,97 @@ static EVP_PKEY *build_rsa_pkey(const unsigned char *n, int n_len,
   return pkey;
 }
 
+/* Map SSH curve identifier to OpenSSL group name */
+static const char *ssh_curve_to_openssl_group(const char *curve) {
+  if (strcmp(curve, "nistp256") == 0) return "prime256v1";
+  if (strcmp(curve, "nistp384") == 0) return "secp384r1";
+  if (strcmp(curve, "nistp521") == 0) return "secp521r1";
+  return 0;
+}
+
+/* Get expected raw EC point size from SSH curve identifier */
+static int ssh_curve_point_size(const char *curve) {
+  if (strcmp(curve, "nistp256") == 0) return 65;
+  if (strcmp(curve, "nistp384") == 0) return 97;
+  if (strcmp(curve, "nistp521") == 0) return 133;
+  return 0;
+}
+
+/* Get key size (r/s component size) from SSH curve identifier */
+static int ssh_curve_key_size(const char *curve) {
+  if (strcmp(curve, "nistp256") == 0) return 32;
+  if (strcmp(curve, "nistp384") == 0) return 48;
+  if (strcmp(curve, "nistp521") == 0) return 66;
+  return 0;
+}
+
+/* Build an ECDSA EVP_PKEY from group name, raw uncompressed point, and private scalar */
+static EVP_PKEY *build_ecdsa_pkey(const char *group,
+                                  const unsigned char *pub, int pub_len,
+                                  const unsigned char *priv, int priv_len) {
+  EVP_PKEY *pkey = 0;
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, "EC", 0);
+  if (!ctx) return 0;
+  void *bld = OSSL_PARAM_BLD_new();
+  if (!bld) { EVP_PKEY_CTX_free(ctx); return 0; }
+  OSSL_PARAM_BLD_push_utf8_string(bld, "group", group, 0);
+  OSSL_PARAM_BLD_push_octet_string(bld, "pub", pub, (size_t)pub_len);
+  if (priv && priv_len > 0)
+    OSSL_PARAM_BLD_push_octet_string(bld, "priv", priv, (size_t)priv_len);
+  const void *params = OSSL_PARAM_BLD_to_param(bld);
+  OSSL_PARAM_BLD_free(bld);
+  if (!params) { EVP_PKEY_CTX_free(ctx); return 0; }
+  if (EVP_PKEY_fromdata_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return 0; }
+  int sel = (priv && priv_len > 0) ? EVP_PKEY_KEYPAIR : EVP_PKEY_PUBLIC_KEY;
+  if (EVP_PKEY_fromdata(ctx, &pkey, sel, params) <= 0) {
+    EVP_PKEY_CTX_free(ctx);
+    return 0;
+  }
+  EVP_PKEY_CTX_free(ctx);
+  return pkey;
+}
+
+/* Build a DSA EVP_PKEY from raw components */
+static EVP_PKEY *build_dsa_pkey(const unsigned char *p, int p_len,
+                                const unsigned char *q, int q_len,
+                                const unsigned char *g, int g_len,
+                                const unsigned char *y, int y_len,
+                                const unsigned char *x, int x_len) {
+  BIGNUM *bn_p = BN_bin2bn(p, p_len, 0);
+  BIGNUM *bn_q = BN_bin2bn(q, q_len, 0);
+  BIGNUM *bn_g = BN_bin2bn(g, g_len, 0);
+  BIGNUM *bn_y = BN_bin2bn(y, y_len, 0);
+  BIGNUM *bn_x = (x && x_len > 0) ? BN_bin2bn(x, x_len, 0) : 0;
+  if (!bn_p || !bn_q || !bn_g || !bn_y) {
+    if (bn_p) BN_free(bn_p); if (bn_q) BN_free(bn_q);
+    if (bn_g) BN_free(bn_g); if (bn_y) BN_free(bn_y);
+    if (bn_x) BN_free(bn_x);
+    return 0;
+  }
+  void *bld = OSSL_PARAM_BLD_new();
+  if (!bld) { BN_free(bn_p); BN_free(bn_q); BN_free(bn_g); BN_free(bn_y); if (bn_x) BN_free(bn_x); return 0; }
+  OSSL_PARAM_BLD_push_BN(bld, "p", bn_p);
+  OSSL_PARAM_BLD_push_BN(bld, "q", bn_q);
+  OSSL_PARAM_BLD_push_BN(bld, "g", bn_g);
+  OSSL_PARAM_BLD_push_BN(bld, "pub", bn_y);
+  if (bn_x) OSSL_PARAM_BLD_push_BN(bld, "priv", bn_x);
+  const void *params = OSSL_PARAM_BLD_to_param(bld);
+  OSSL_PARAM_BLD_free(bld);
+  if (!params) { BN_free(bn_p); BN_free(bn_q); BN_free(bn_g); BN_free(bn_y); if (bn_x) BN_free(bn_x); return 0; }
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(0, "DSA", 0);
+  if (!ctx) { BN_free(bn_p); BN_free(bn_q); BN_free(bn_g); BN_free(bn_y); if (bn_x) BN_free(bn_x); return 0; }
+  EVP_PKEY *pkey = 0;
+  int ok = 1;
+  if (EVP_PKEY_fromdata_init(ctx) <= 0) ok = 0;
+  if (ok && EVP_PKEY_fromdata(ctx, &pkey, bn_x ? EVP_PKEY_KEYPAIR : EVP_PKEY_PUBLIC_KEY, params) <= 0) ok = 0;
+  EVP_PKEY_CTX_free(ctx);
+  BN_free(bn_p); BN_free(bn_q); BN_free(bn_g); BN_free(bn_y);
+  if (bn_x) BN_free(bn_x);
+  if (ok) return pkey;
+  if (pkey) EVP_PKEY_free(pkey);
+  return 0;
+}
+
 /* Decode a single OpenSSH-format private key blob (the plaintext form
  * stored inside openssh-key-v1). Produces an EVP_PKEY. */
 static EVP_PKEY *openssh_decode_plain(const unsigned char *enc, int enc_len) {
@@ -1008,6 +1270,54 @@ static EVP_PKEY *openssh_decode_plain(const unsigned char *enc, int enc_len) {
     }
     EVP_PKEY *pkey = build_rsa_pkey(n, n_len, e, e_len, d, d_len);
     free(n); free(e); free(d); free(iqmp); free(p); free(q);
+    return pkey;
+  } else if (strncmp(keytype, "ecdsa-sha2-nistp", 16) == 0) {
+    /* ECDSA: curve_id(string) + pubkey(string) + privkey(string) + comment(string) */
+    char curve_id[32];
+    int curve_len = 0;
+    if (!read_ssh_string(enc, enc_len, &pos, (unsigned char *)curve_id,
+                         sizeof(curve_id) - 1, &curve_len)) return 0;
+    curve_id[curve_len] = '\0';
+    const char *group = ssh_curve_to_openssl_group(curve_id);
+    if (!group) return 0;
+    int expected_pub_len = ssh_curve_point_size(curve_id);
+    if (expected_pub_len == 0) return 0;
+    unsigned char pub[133]; /* max P-521 */
+    int pub_len = 0;
+    if (!read_ssh_string(enc, enc_len, &pos, pub, sizeof(pub), &pub_len)) return 0;
+    if (pub_len != expected_pub_len) return 0;
+    unsigned char priv[66]; /* max P-521 */
+    int priv_len = 0;
+    if (!read_ssh_string(enc, enc_len, &pos, priv, sizeof(priv), &priv_len)) return 0;
+    /* comment */
+    if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) return 0;
+    return build_ecdsa_pkey(group, pub, pub_len, priv, priv_len);
+  } else if (strcmp(keytype, "ssh-dss") == 0) {
+    /* DSA: p + q + g + y + x + comment */
+    const unsigned char *v;
+    int vlen;
+    unsigned char *dp = 0, *dq = 0, *dg = 0, *dy = 0, *dx = 0;
+    int dp_len = 0, dq_len = 0, dg_len = 0, dy_len = 0, dx_len = 0;
+    #define READ_DSA_PARAM(buf, len) do { \
+      if (!read_ssh_string_peek(enc, enc_len, &pos, &v, &vlen)) { \
+        free(dp); free(dq); free(dg); free(dy); return 0; \
+      } \
+      buf = (unsigned char *)malloc((size_t)vlen); \
+      memcpy(buf, v, (size_t)vlen); \
+      len = vlen; \
+    } while(0)
+    READ_DSA_PARAM(dp, dp_len);
+    READ_DSA_PARAM(dq, dq_len);
+    READ_DSA_PARAM(dg, dg_len);
+    READ_DSA_PARAM(dy, dy_len);
+    READ_DSA_PARAM(dx, dx_len);
+    #undef READ_DSA_PARAM
+    /* comment */
+    if (!read_ssh_string_peek(enc, enc_len, &pos, 0, 0)) {
+      free(dp); free(dq); free(dg); free(dy); free(dx); return 0;
+    }
+    EVP_PKEY *pkey = build_dsa_pkey(dp, dp_len, dq, dq_len, dg, dg_len, dy, dy_len, dx, dx_len);
+    free(dp); free(dq); free(dg); free(dy); free(dx);
     return pkey;
   }
   return 0;
@@ -1187,4 +1497,137 @@ int moonbitlang_ssh_read_openssh_pubkey(const char *path_bytes, int path_len,
   if (blob_len) *blob_len = out_len;
   free(raw);
   return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* EC curve NID detection                                             */
+/* ------------------------------------------------------------------ */
+
+/* Returns the EC curve NID from an EVP_PKEY:
+ *   415 -> prime256v1 (P-256)
+ *   715 -> secp384r1  (P-384)
+ *   716 -> secp521r1  (P-521)
+ * Returns 0 for non-EC keys or on failure. */
+int moonbitlang_ssh_pkey_ec_curve_nid(void *pkey) {
+  if (!pkey) return 0;
+  if (EVP_PKEY_get_id((const EVP_PKEY *)pkey) != 408) return 0;
+  char group_name[64];
+  size_t group_len = 0;
+  if (!EVP_PKEY_get_utf8_string_param((const EVP_PKEY *)pkey, "group",
+                                       group_name, sizeof(group_name), &group_len))
+    return 0;
+  group_name[group_len] = '\0';
+  if (strcmp(group_name, "prime256v1") == 0) return 415;
+  if (strcmp(group_name, "secp384r1") == 0) return 715;
+  if (strcmp(group_name, "secp521r1") == 0) return 716;
+  return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Build EC public key from curve name + raw point                    */
+/* ------------------------------------------------------------------ */
+int moonbitlang_ssh_pkey_from_ec_point(
+    const char *curve, int curve_len,
+    const unsigned char *point, int point_len,
+    void **out) {
+  /* curve is SSH curve name like "nistp256" */
+  char curve_buf[32];
+  if (curve_len < 0 || curve_len >= (int)sizeof(curve_buf)) return 0;
+  memcpy(curve_buf, curve, (size_t)curve_len);
+  curve_buf[curve_len] = '\0';
+  const char *group = ssh_curve_to_openssl_group(curve_buf);
+  if (!group) return 0;
+  EVP_PKEY *pkey = build_ecdsa_pkey(group, point, point_len, 0, 0);
+  if (!pkey) return 0;
+  *out = pkey;
+  return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Build DSA public key from raw components                           */
+/* ------------------------------------------------------------------ */
+int moonbitlang_ssh_pkey_from_dsa_components(
+    const unsigned char *p, int p_len,
+    const unsigned char *q, int q_len,
+    const unsigned char *g, int g_len,
+    const unsigned char *y, int y_len,
+    void **out) {
+  EVP_PKEY *pkey = build_dsa_pkey(p, p_len, q, q_len, g, g_len, y, y_len, 0, 0);
+  if (!pkey) return 0;
+  *out = pkey;
+  return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Generic verify (dispatches by key type)                            */
+/*   Returns 1 if valid, 0 if invalid, -1 on error.                  */
+/* ------------------------------------------------------------------ */
+int moonbitlang_ssh_pkey_verify(void *pkey, int md_alg_id,
+                                const unsigned char *tbs, int tbs_len,
+                                const unsigned char *sig, int sig_len) {
+  if (!pkey) return -1;
+  int key_type = EVP_PKEY_get_id((EVP_PKEY *)pkey);
+
+  if (key_type == 6) {
+    /* RSA: use verify_recover approach (existing) */
+    unsigned char hash_buf[64];
+    unsigned int hash_len = 0;
+    const EVP_MD *md = md_by_id(md_alg_id);
+    if (!md) return -1;
+    if (!EVP_Digest(tbs, (size_t)tbs_len, hash_buf, &hash_len, md, NULL)) return -1;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)pkey, 0);
+    if (!ctx) return -1;
+    unsigned char recovered[512];
+    size_t recovered_len = sizeof(recovered);
+    int ok = 1;
+    if (EVP_PKEY_verify_recover_init(ctx) <= 0) ok = -1;
+    if (ok == 1 && EVP_PKEY_verify_recover(ctx, recovered, &recovered_len,
+                                           sig, (size_t)sig_len) <= 0) ok = -1;
+    EVP_PKEY_CTX_free(ctx);
+    if (ok < 0) return 0;
+    if (recovered_len < (size_t)(hash_len + 8)) return 0;
+    const unsigned char *extracted = recovered + (recovered_len - hash_len);
+    return memcmp(extracted, hash_buf, (size_t)hash_len) == 0 ? 1 : 0;
+  }
+
+  if (key_type == 408) {
+    /* ECDSA: convert raw r||s to DER, then EVP_DigestVerify */
+    const EVP_MD *md = md_by_id(md_alg_id);
+    if (!md) return -1;
+    /* Determine key size from curve NID */
+    int nid = moonbitlang_ssh_pkey_ec_curve_nid(pkey);
+    int key_size = 0;
+    switch (nid) {
+      case 415: key_size = 32; break;
+      case 715: key_size = 48; break;
+      case 716: key_size = 66; break;
+      default: return -1;
+    }
+    if (sig_len != key_size * 2) return -1;
+    /* Convert raw→DER */
+    unsigned char der_sig[256];
+    int der_len = ecdsa_raw_to_der(sig, sig_len, der_sig, sizeof(der_sig));
+    if (der_len <= 0) return -1;
+    /* Verify */
+    EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+    if (!mctx) return -1;
+    int rc = EVP_DigestVerifyInit(mctx, 0, md, 0, (EVP_PKEY *)pkey);
+    if (rc == 1) rc = EVP_DigestVerify(mctx, der_sig, (size_t)der_len, tbs, (size_t)tbs_len);
+    EVP_MD_CTX_free(mctx);
+    return rc == 1 ? 1 : 0;
+  }
+
+  if (key_type == 116) {
+    /* DSA: EVP_DigestVerify with SHA-1 */
+    const EVP_MD *md = md_by_id(md_alg_id);
+    if (!md) md = EVP_sha1();
+    EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+    if (!mctx) return -1;
+    int rc = EVP_DigestVerifyInit(mctx, 0, md, 0, (EVP_PKEY *)pkey);
+    if (rc == 1) rc = EVP_DigestVerify(mctx, sig, (size_t)sig_len, tbs, (size_t)tbs_len);
+    EVP_MD_CTX_free(mctx);
+    return rc == 1 ? 1 : 0;
+  }
+
+  return -1;
 }

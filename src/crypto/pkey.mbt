@@ -193,8 +193,9 @@ pub fn PKey::size(self : PKey) -> Int {
 ///|
 /// 返回 OpenSSL `EVP_PKEY_get_id()` 的结果：
 ///   6    -> RSA
+///   116  -> DSA
+///   408  -> EC (ECDSA)
 ///   1087 -> Ed25519
-///   其它 -> 未实现
 pub fn PKey::key_id(self : PKey) -> Int {
   pkey_id_ffi(self.ptr)
 }
@@ -208,12 +209,16 @@ fn PKey::raw_ptr(self : PKey) -> Pkey {
 ///|
 /// 通用签名。
 /// `md_alg`：
-///   0 -> 使用密钥自己的签名方案（EdDSA 用于 ed25519，原始 RSA 用于无 MD）
+///   0 -> 使用密钥自己的签名方案（EdDSA 用于 ed25519）
 ///   1 -> SHA-1
 ///   2 -> SHA-256
-/// 输出长度：
+///   3 -> SHA-384
+///   4 -> SHA-521
+/// 输出格式：
 ///   Ed25519 -> 64 字节
-///   RSA     -> 与 key 大小一致（1024=128, 2048=256, 4096=512）
+///   RSA     -> 与 key 大小一致
+///   DSA     -> DER 编码
+///   ECDSA   -> r||s 固定宽度
 pub fn PKey::sign(
   self : PKey,
   md_alg : Int,
@@ -285,31 +290,31 @@ pub fn PKey::rsa_sign(
 }
 
 ///|
-/// RSA 验签。
+/// 通用验签（支持 RSA/ECDSA/DSA）。
 pub fn PKey::verify(
   self : PKey,
   md_alg : Int,
   data : Bytes,
   sig : Bytes,
 ) -> Bool raise CryptoError {
-  let rc = rsa_verify_ffi(
+  let rc = pkey_verify_ffi(
     self.ptr, md_alg, data, data.length(), sig, sig.length(),
   )
   if rc < 0 {
-    raise CryptoError::OperationFailed("RSA_verify", err_get_and_clear())
+    raise CryptoError::OperationFailed("pkey_verify", err_get_and_clear())
   }
   rc == 1
 }
 
 #borrow(tbs, sig)
-extern "C" fn rsa_verify_ffi(
+extern "C" fn pkey_verify_ffi(
   p : Pkey,
   md_alg : Int,
   tbs : Bytes,
   tbs_len : Int,
   sig : Bytes,
   sig_len : Int,
-) -> Int = "moonbitlang_ssh_rsa_verify"
+) -> Int = "moonbitlang_ssh_pkey_verify"
 
 // ==================== ECDH P-256 ====================
 
@@ -388,4 +393,88 @@ pub fn read_openssh_pubkey(
   }
   let blob_arr = FixedArray::makei(blob_len.val, i => blob_buf.unsafe_get(i))
   (alg, Bytes::from_array(blob_arr))
+}
+
+// ==================== EC / DSA key construction ====================
+
+///|
+extern "C" fn pkey_ec_curve_nid_ffi(p : Pkey) -> Int =
+  "moonbitlang_ssh_pkey_ec_curve_nid"
+
+///|
+#borrow(curve, point, out)
+extern "C" fn pkey_from_ec_point_ffi(
+  curve : Bytes,
+  curve_len : Int,
+  point : Bytes,
+  point_len : Int,
+  out : Ref[Pkey],
+) -> Int = "moonbitlang_ssh_pkey_from_ec_point"
+
+///|
+#borrow(p, q, g, y, out)
+extern "C" fn pkey_from_dsa_components_ffi(
+  p : Bytes,
+  p_len : Int,
+  q : Bytes,
+  q_len : Int,
+  g : Bytes,
+  g_len : Int,
+  y : Bytes,
+  y_len : Int,
+  out : Ref[Pkey],
+) -> Int = "moonbitlang_ssh_pkey_from_dsa_components"
+
+///|
+/// 返回 EC 曲线 NID：
+///   415 -> prime256v1 (P-256)
+///   715 -> secp384r1  (P-384)
+///   716 -> secp521r1  (P-521)
+///   0   -> 非 EC 密钥
+pub fn PKey::ec_curve_nid(self : PKey) -> Int {
+  pkey_ec_curve_nid_ffi(self.ptr)
+}
+
+///|
+/// 从 EC 曲线名和原始公钥点构建 PKey（仅公钥，用于 host key 验证）。
+/// `curve` 为 SSH 曲线标识：`"nistp256"` / `"nistp384"` / `"nistp521"`。
+/// `point` 为原始未压缩 EC 点（`04 || x || y`）。
+pub fn PKey::from_ec_point(
+  curve : String,
+  point : Bytes,
+) -> PKey raise CryptoError {
+  ensure_openssl()
+  let out : Ref[Pkey] = Ref(pkey_new_ffi())
+  let curve_bytes = @utf8.encode(curve)
+  let rc = pkey_from_ec_point_ffi(
+    curve_bytes, curve_bytes.length(), point, point.length(), out,
+  )
+  if rc != 1 {
+    pkey_free_ffi(out.val)
+    raise CryptoError::OperationFailed("from_ec_point", err_get_and_clear())
+  }
+  { ptr: out.val }
+}
+
+///|
+/// 从 DSA 组件构建公钥 PKey（用于 host key 验证）。
+pub fn PKey::from_dsa_components(
+  p : Bytes,
+  q : Bytes,
+  g : Bytes,
+  y : Bytes,
+) -> PKey raise CryptoError {
+  ensure_openssl()
+  let out : Ref[Pkey] = Ref(pkey_new_ffi())
+  let rc = pkey_from_dsa_components_ffi(
+    p, p.length(), q, q.length(), g, g.length(), y, y.length(), out,
+  )
+  if rc != 1 {
+    pkey_free_ffi(out.val)
+    raise CryptoError::OperationFailed(
+      "from_dsa_components",
+      err_get_and_clear(),
+    )
+  }
+  { ptr: out.val }
 }

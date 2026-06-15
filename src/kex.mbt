@@ -20,7 +20,10 @@ pub fn kex_algorithms() -> Array[String] {
 
 ///|
 pub fn server_host_key_algorithms() -> Array[String] {
-  ["rsa-sha2-256", "ssh-rsa"]
+  [
+    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+    "ssh-ed25519", "rsa-sha2-256", "ssh-rsa", "ssh-dss",
+  ]
 }
 
 ///|
@@ -763,6 +766,10 @@ fn verify_host_key_signature(
   let md_alg = match sig_blob.alg {
     "rsa-sha2-256" => 2 // SHA-256
     "ssh-rsa" => 1 // SHA-1
+    "ssh-dss" => 1 // SHA-1
+    "ecdsa-sha2-nistp256" => 2 // SHA-256
+    "ecdsa-sha2-nistp384" => 3 // SHA-384
+    "ecdsa-sha2-nistp521" => 4 // SHA-521
     _ =>
       raise ProtocolError(
         "kex: unsupported signature algorithm \{sig_blob.alg}",
@@ -795,6 +802,22 @@ fn parse_host_key_to_pkey(
       let n = r.read_string()
       @crypto.PKey::from_rsa_components(n, e) catch {
         e => raise ProtocolError("kex: failed to load RSA key: \{e}")
+      }
+    }
+    "ssh-dss" => {
+      let p = r.read_string()
+      let q = r.read_string()
+      let g = r.read_string()
+      let y = r.read_string()
+      @crypto.PKey::from_dsa_components(p, q, g, y) catch {
+        e => raise ProtocolError("kex: failed to load DSA key: \{e}")
+      }
+    }
+    "ecdsa-sha2-nistp256" | "ecdsa-sha2-nistp384" | "ecdsa-sha2-nistp521" => {
+      let curve_id = r.read_string_as_str()
+      let point = r.read_string()
+      @crypto.PKey::from_ec_point(curve_id, point) catch {
+        e => raise ProtocolError("kex: failed to load ECDSA key: \{e}")
       }
     }
     _ => raise ProtocolError("kex: unsupported host key \{alg}")
