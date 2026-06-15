@@ -926,17 +926,17 @@ int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
     return ok;
   }
 
-  /* RSA: EVP_PKEY_sign with digest */
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new((EVP_PKEY *)pkey, 0);
-  if (!ctx) return 0;
+  /* RSA: EVP_DigestSign (hashes + signs in one step, PKCS#1 v1.5 by default) */
+  const EVP_MD *md = md_by_id(md_alg_id);
+  if (!md) return 0;
+  EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+  if (!mctx) return 0;
   int ok = 1;
-  if (EVP_PKEY_sign_init(ctx) <= 0) ok = 0;
-  if (ok && EVP_PKEY_CTX_set_signature_md(ctx, md_by_id(md_alg_id)) <= 0)
-    ok = 0;
+  if (EVP_DigestSignInit(mctx, 0, md, 0, (EVP_PKEY *)pkey) <= 0) ok = 0;
   size_t slen = (size_t)*sig_len;
-  if (ok && EVP_PKEY_sign(ctx, sig, &slen, tbs, (size_t)tbs_len) <= 0) ok = 0;
+  if (ok && EVP_DigestSign(mctx, sig, &slen, tbs, (size_t)tbs_len) <= 0) ok = 0;
   if (ok) *sig_len = (int)slen;
-  EVP_PKEY_CTX_free(ctx);
+  EVP_MD_CTX_free(mctx);
   return ok;
 }
 

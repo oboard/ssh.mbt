@@ -204,7 +204,10 @@ pub fn Client::auth_publickey(
     other => raise ProtocolError("auth: unsupported key type \{other}")
   }
   // 防止 .pub 文件声明的算法和私钥类型不匹配
-  if pub_alg != pubkey_alg {
+  // RSA 公钥 blob 始终使用 'ssh-rsa'，但签名算法可以是 'rsa-sha2-256' 或 'rsa-sha2-512'（RFC 8332）
+  let alg_compatible = pub_alg == pubkey_alg ||
+    (pub_alg == "ssh-rsa" && (pubkey_alg == "rsa-sha2-256" || pubkey_alg == "rsa-sha2-512"))
+  if !alg_compatible {
     raise ProtocolError(
       "auth: pubkey file declares '\{pub_alg}' but private key is '\{pubkey_alg}'",
     )
