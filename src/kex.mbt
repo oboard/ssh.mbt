@@ -21,8 +21,8 @@ pub fn kex_algorithms() -> Array[String] {
 ///|
 pub fn server_host_key_algorithms() -> Array[String] {
   [
-    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
-    "ssh-ed25519", "rsa-sha2-256", "ssh-rsa", "ssh-dss",
+    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519",
+    "rsa-sha2-256", "ssh-rsa", "ssh-dss",
   ]
 }
 

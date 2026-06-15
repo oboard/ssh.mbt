@@ -57,7 +57,7 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(const EVP_MD *, EVP_sha1, (void)) \
   IMPORT_FUNC(const EVP_MD *, EVP_sha256, (void)) \
   IMPORT_FUNC(const EVP_MD *, EVP_sha384, (void)) \
-  IMPORT_FUNC(const EVP_MD *, EVP_sha521, (void)) \
+  IMPORT_FUNC(const EVP_MD *, EVP_sha512, (void)) \
   IMPORT_FUNC(EVP_MD_CTX *, EVP_MD_CTX_new, (void)) \
   IMPORT_FUNC(void, EVP_MD_CTX_free, (EVP_MD_CTX *ctx)) \
   IMPORT_FUNC(int, EVP_DigestInit_ex, (EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)) \
@@ -142,12 +142,13 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(EVP_PKEY *, PEM_read_bio_PrivateKey, (BIO *bp, EVP_PKEY **x, void *cb, void *u)) \
   IMPORT_FUNC(EVP_PKEY *, PEM_read_bio_PUBKEY, (BIO *bp, EVP_PKEY **x, void *cb, void *u))
 
-#ifndef EVP_PKEY_KEYPAIR
-#define EVP_PKEY_KEYPAIR  0x0007
-#endif
-#ifndef EVP_PKEY_PUBLIC_KEY
-#define EVP_PKEY_PUBLIC_KEY 0x0002
-#endif
+/* EVP_PKEY selection constants.
+ * These changed across OpenSSL 3.x versions:
+ *   3.0-3.4: EVP_PKEY_PUBLIC_KEY=0x06, EVP_PKEY_KEYPAIR=0x07
+ *   3.5+:   EVP_PKEY_PUBLIC_KEY=0x86, EVP_PKEY_KEYPAIR=0x87
+ * We store them in variables and set them after version detection. */
+static int SEL_PUBLIC_KEY = 0x06;  /* default for OpenSSL 3.0-3.4 */
+static int SEL_KEYPAIR = 0x07;
 
 #define IMPORT_FUNC(ret, name, params) static ret (*name) params;
 IMPORTED_OPEN_SSL_FUNCTIONS
@@ -201,6 +202,16 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
 #undef IMPORT_FUNC
 #endif
   OPENSSL_init_crypto(0, NULL);
+  /* Set selection constants based on detected OpenSSL version.
+   * OpenSSL 3.5+ added OSSL_KEYMGMT_SELECT_OTHER_PARAMETERS (0x80)
+   * to EVP_PKEY_KEY_PARAMETERS, changing the selection values. */
+  if (*major >= 3 && *minor >= 5) {
+    SEL_PUBLIC_KEY = 0x86;
+    SEL_KEYPAIR = 0x87;
+  } else {
+    SEL_PUBLIC_KEY = 0x06;
+    SEL_KEYPAIR = 0x07;
+  }
   return 0;
 }
 
@@ -231,7 +242,7 @@ static const EVP_MD *md_by_id(int alg_id) {
     case 1: return EVP_sha1();
     case 2: return EVP_sha256();
     case 3: return EVP_sha384();
-    case 4: return EVP_sha521();
+    case 4: return EVP_sha512();
     default: return 0;
   }
 }
@@ -717,7 +728,7 @@ int moonbitlang_ssh_pkey_new_rsa(
   EVP_PKEY *pkey = 0;
   int ok = 1;
   if (EVP_PKEY_fromdata_init(ctx) <= 0) ok = 0;
-  if (ok && EVP_PKEY_fromdata(ctx, &pkey, bn_d ? EVP_PKEY_KEYPAIR : EVP_PKEY_PUBLIC_KEY, params) <= 0) ok = 0;
+  if (ok && EVP_PKEY_fromdata(ctx, &pkey, bn_d ? SEL_KEYPAIR : SEL_PUBLIC_KEY, params) <= 0) ok = 0;
   EVP_PKEY_CTX_free(ctx);
   BN_free(bn_n); BN_free(bn_e); if (bn_d) BN_free(bn_d);
   if (ok) { *out = pkey; return 1; }
@@ -1062,7 +1073,7 @@ static EVP_PKEY *build_ed25519_pkey(const unsigned char *pub32,
     EVP_PKEY_CTX_free(ctx);
     return 0;
   }
-  if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) <= 0) {
+  if (EVP_PKEY_fromdata(ctx, &pkey, SEL_KEYPAIR, params) <= 0) {
     EVP_PKEY_CTX_free(ctx);
     return 0;
   }
@@ -1095,7 +1106,7 @@ static EVP_PKEY *build_rsa_pkey(const unsigned char *n, int n_len,
   if (!ctx) { BN_free(bn_n); BN_free(bn_e); BN_free(bn_d); return 0; }
   EVP_PKEY *pkey = 0;
   if (EVP_PKEY_fromdata_init(ctx) <= 0 ||
-      EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) <= 0) {
+      EVP_PKEY_fromdata(ctx, &pkey, SEL_KEYPAIR, params) <= 0) {
     EVP_PKEY_CTX_free(ctx);
     BN_free(bn_n); BN_free(bn_e); BN_free(bn_d);
     if (pkey) EVP_PKEY_free(pkey);
@@ -1147,7 +1158,7 @@ static EVP_PKEY *build_ecdsa_pkey(const char *group,
   OSSL_PARAM_BLD_free(bld);
   if (!params) { EVP_PKEY_CTX_free(ctx); return 0; }
   if (EVP_PKEY_fromdata_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return 0; }
-  int sel = (priv && priv_len > 0) ? EVP_PKEY_KEYPAIR : EVP_PKEY_PUBLIC_KEY;
+  int sel = (priv && priv_len > 0) ? SEL_KEYPAIR : SEL_PUBLIC_KEY;
   if (EVP_PKEY_fromdata(ctx, &pkey, sel, params) <= 0) {
     EVP_PKEY_CTX_free(ctx);
     return 0;
@@ -1188,7 +1199,7 @@ static EVP_PKEY *build_dsa_pkey(const unsigned char *p, int p_len,
   EVP_PKEY *pkey = 0;
   int ok = 1;
   if (EVP_PKEY_fromdata_init(ctx) <= 0) ok = 0;
-  if (ok && EVP_PKEY_fromdata(ctx, &pkey, bn_x ? EVP_PKEY_KEYPAIR : EVP_PKEY_PUBLIC_KEY, params) <= 0) ok = 0;
+  if (ok && EVP_PKEY_fromdata(ctx, &pkey, bn_x ? SEL_KEYPAIR : SEL_PUBLIC_KEY, params) <= 0) ok = 0;
   EVP_PKEY_CTX_free(ctx);
   BN_free(bn_p); BN_free(bn_q); BN_free(bn_g); BN_free(bn_y);
   if (bn_x) BN_free(bn_x);
@@ -1593,7 +1604,9 @@ int moonbitlang_ssh_pkey_verify(void *pkey, int md_alg_id,
   }
 
   if (key_type == 408) {
-    /* ECDSA: convert raw r||s to DER, then EVP_DigestVerify */
+    /* ECDSA: signature is in SSH mpint format: [uint32 r_len][r_bytes][uint32 s_len][s_bytes]
+     * We need to convert to raw r||s format (each zero-padded to key_size bytes)
+     * before converting to DER for EVP_DigestVerify. */
     const EVP_MD *md = md_by_id(md_alg_id);
     if (!md) return -1;
     /* Determine key size from curve NID */
@@ -1605,10 +1618,33 @@ int moonbitlang_ssh_pkey_verify(void *pkey, int md_alg_id,
       case 716: key_size = 66; break;
       default: return -1;
     }
-    if (sig_len != key_size * 2) return -1;
+    /* Parse SSH mpint r and s from the signature blob */
+    int pos = 0;
+    uint32_t r_len = 0, s_len = 0;
+    if (!read_u32(sig, sig_len, &pos, &r_len)) return -1;
+    if (pos + (int)r_len > sig_len) return -1;
+    const unsigned char *r_bytes = sig + pos;
+    pos += (int)r_len;
+    if (!read_u32(sig, sig_len, &pos, &s_len)) return -1;
+    if (pos + (int)s_len > sig_len) return -1;
+    const unsigned char *s_bytes = sig + pos;
+    /* Strip leading zero bytes from mpint (sign byte for positive numbers) */
+    int r_off = 0;
+    while (r_off < (int)r_len - 1 && r_bytes[r_off] == 0x00) r_off++;
+    int s_off = 0;
+    while (s_off < (int)s_len - 1 && s_bytes[s_off] == 0x00) s_off++;
+    int r_real = (int)r_len - r_off;
+    int s_real = (int)s_len - s_off;
+    if (r_real > key_size || s_real > key_size) return -1;
+    /* Build raw r||s (zero-padded to key_size each) */
+    unsigned char raw_sig[256];
+    if (key_size * 2 > (int)sizeof(raw_sig)) return -1;
+    memset(raw_sig, 0, (size_t)(key_size * 2));
+    memcpy(raw_sig + key_size - r_real, r_bytes + r_off, (size_t)r_real);
+    memcpy(raw_sig + key_size * 2 - s_real, s_bytes + s_off, (size_t)s_real);
     /* Convert raw→DER */
-    unsigned char der_sig[256];
-    int der_len = ecdsa_raw_to_der(sig, sig_len, der_sig, sizeof(der_sig));
+    unsigned char der_sig[512];
+    int der_len = ecdsa_raw_to_der(raw_sig, key_size * 2, der_sig, sizeof(der_sig));
     if (der_len <= 0) return -1;
     /* Verify */
     EVP_MD_CTX *mctx = EVP_MD_CTX_new();

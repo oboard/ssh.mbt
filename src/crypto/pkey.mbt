@@ -244,7 +244,12 @@ pub fn PKey::ed25519_pub_raw(self : PKey) -> Bytes raise CryptoError {
   let name = @utf8.encode("pub")
   let out_len = Ref(0)
   let rc = pkey_get_octet_param_ffi(
-    self.ptr, name, name.length(), buf, cap, out_len,
+    self.ptr,
+    name,
+    name.length(),
+    buf,
+    cap,
+    out_len,
   )
   if rc != 1 {
     raise CryptoError::OperationFailed(
@@ -259,10 +264,7 @@ pub fn PKey::ed25519_pub_raw(self : PKey) -> Bytes raise CryptoError {
 ///|
 /// 取 RSA 公钥模数（n）或指数（e）原始字节。
 /// 仅在 key_id() == 6 时有意义。
-pub fn PKey::rsa_get_bn(
-  self : PKey,
-  name : String,
-) -> Bytes raise CryptoError {
+pub fn PKey::rsa_get_bn(self : PKey, name : String) -> Bytes raise CryptoError {
   let cap = 1024
   let buf = FixedArray::make(cap, b'\x00')
   let nb = @utf8.encode(name)
@@ -298,7 +300,12 @@ pub fn PKey::verify(
   sig : Bytes,
 ) -> Bool raise CryptoError {
   let rc = pkey_verify_ffi(
-    self.ptr, md_alg, data, data.length(), sig, sig.length(),
+    self.ptr,
+    md_alg,
+    data,
+    data.length(),
+    sig,
+    sig.length(),
   )
   if rc < 0 {
     raise CryptoError::OperationFailed("pkey_verify", err_get_and_clear())
@@ -306,6 +313,7 @@ pub fn PKey::verify(
   rc == 1
 }
 
+///|
 #borrow(tbs, sig)
 extern "C" fn pkey_verify_ffi(
   p : Pkey,
@@ -342,7 +350,11 @@ pub fn ecdh_nistp256_derive(
   let out = FixedArray::make(32, b'\x00')
   let out_len = Ref(32)
   let rc = ecdh_derive_ffi(
-    our.ptr, peer_pub_sec1, peer_pub_sec1.length(), out, out_len,
+    our.ptr,
+    peer_pub_sec1,
+    peer_pub_sec1.length(),
+    out,
+    out_len,
   )
   if rc != 1 {
     raise CryptoError::OperationFailed("ecdh_derive", err_get_and_clear())
@@ -371,9 +383,7 @@ pub fn base64_decode(s : String) -> Bytes raise CryptoError {
 /// 读取 OpenSSH 格式的公钥文件（单行：`<alg> <base64-blob> <comment>`）。
 /// 返回 `(alg_name, pubkey_blob)`：blob 是 SSH 线协议中使用的字节
 /// （已是 SSH_MSG_USERAUTH_REQUEST 中 "publickey" 字段的完整数据）。
-pub fn read_openssh_pubkey(
-  path : String,
-) -> (String, Bytes) raise CryptoError {
+pub fn read_openssh_pubkey(path : String) -> (String, Bytes) raise CryptoError {
   let path_bytes = @utf8.encode(path)
   let alg_buf = FixedArray::make(64, Byte::default())
   let blob_cap = 4096
@@ -381,7 +391,13 @@ pub fn read_openssh_pubkey(
   let alg_len = Ref(0)
   let blob_len = Ref(0)
   let rc = read_openssh_pubkey_ffi(
-    path_bytes, path_bytes.length(), alg_buf, 64, alg_len, blob_buf, blob_cap,
+    path_bytes,
+    path_bytes.length(),
+    alg_buf,
+    64,
+    alg_len,
+    blob_buf,
+    blob_cap,
     blob_len,
   )
   if rc != 1 {
@@ -398,8 +414,7 @@ pub fn read_openssh_pubkey(
 // ==================== EC / DSA key construction ====================
 
 ///|
-extern "C" fn pkey_ec_curve_nid_ffi(p : Pkey) -> Int =
-  "moonbitlang_ssh_pkey_ec_curve_nid"
+extern "C" fn pkey_ec_curve_nid_ffi(p : Pkey) -> Int = "moonbitlang_ssh_pkey_ec_curve_nid"
 
 ///|
 #borrow(curve, point, out)
@@ -447,7 +462,11 @@ pub fn PKey::from_ec_point(
   let out : Ref[Pkey] = Ref(pkey_new_ffi())
   let curve_bytes = @utf8.encode(curve)
   let rc = pkey_from_ec_point_ffi(
-    curve_bytes, curve_bytes.length(), point, point.length(), out,
+    curve_bytes,
+    curve_bytes.length(),
+    point,
+    point.length(),
+    out,
   )
   if rc != 1 {
     pkey_free_ffi(out.val)
@@ -467,7 +486,15 @@ pub fn PKey::from_dsa_components(
   ensure_openssl()
   let out : Ref[Pkey] = Ref(pkey_new_ffi())
   let rc = pkey_from_dsa_components_ffi(
-    p, p.length(), q, q.length(), g, g.length(), y, y.length(), out,
+    p,
+    p.length(),
+    q,
+    q.length(),
+    g,
+    g.length(),
+    y,
+    y.length(),
+    out,
   )
   if rc != 1 {
     pkey_free_ffi(out.val)
