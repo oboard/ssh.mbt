@@ -883,7 +883,8 @@ int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
   }
 
   if (key_type == 408) {
-    /* ECDSA: EVP_DigestSign with appropriate digest, then DER→raw */
+    /* ECDSA: EVP_DigestSign with appropriate digest, then DER→SSH mpint pair.
+     * Per RFC 5656 §3.1.2 the sig_blob is: mpint r || mpint s */
     const EVP_MD *md = md_by_id(md_alg_id);
     if (!md) return 0;
     EVP_MD_CTX *mctx = EVP_MD_CTX_new();
@@ -898,16 +899,53 @@ int moonbitlang_ssh_pkey_sign(void *pkey, int md_alg_id,
     if (ok && EVP_DigestSign(mctx, der_sig, &der_len, tbs, (size_t)tbs_len) <= 0) ok = 0;
     EVP_MD_CTX_free(mctx);
     if (!ok) return 0;
-    /* Determine key size from the curve */
-    int key_size = (int)(der_len / 3); /* rough estimate; use max */
-    /* Try known sizes: P-256=32, P-384=48, P-521=66 */
-    if (*sig_len >= 64 && der_len <= 72) key_size = 32;       /* P-256 */
-    else if (*sig_len >= 96 && der_len <= 104) key_size = 48;  /* P-384 */
-    else if (*sig_len >= 132 && der_len <= 140) key_size = 66; /* P-521 */
-    else key_size = *sig_len / 2;
-    int raw_len = ecdsa_der_to_raw(der_sig, (int)der_len, sig, *sig_len, key_size);
-    if (raw_len <= 0) return 0;
-    *sig_len = raw_len;
+    /* Parse DER SEQUENCE { INTEGER r, INTEGER s } → SSH mpint pair */
+    int dpos = 0;
+    if (dpos >= (int)der_len || der_sig[dpos] != 0x30) return 0; dpos++;
+    if (dpos >= (int)der_len) return 0;
+    int seq_len = der_sig[dpos]; dpos++;
+    (void)seq_len;
+    /* INTEGER r */
+    if (dpos >= (int)der_len || der_sig[dpos] != 0x02) return 0; dpos++;
+    if (dpos >= (int)der_len) return 0;
+    int r_int_len = der_sig[dpos]; dpos++;
+    if (dpos + r_int_len > (int)der_len) return 0;
+    const unsigned char *r_bytes = der_sig + dpos;
+    int r_real = r_int_len;
+    /* strip leading zero (sign byte) */
+    while (r_real > 1 && r_bytes[0] == 0x00) { r_bytes++; r_real--; }
+    dpos += r_int_len;
+    /* INTEGER s */
+    if (dpos >= (int)der_len || der_sig[dpos] != 0x02) return 0; dpos++;
+    if (dpos >= (int)der_len) return 0;
+    int s_int_len = der_sig[dpos]; dpos++;
+    if (dpos + s_int_len > (int)der_len) return 0;
+    const unsigned char *s_bytes = der_sig + dpos;
+    int s_real = s_int_len;
+    while (s_real > 1 && s_bytes[0] == 0x00) { s_bytes++; s_real--; }
+    /* Build SSH mpint pair: uint32(r_len) || r_bytes || uint32(s_len) || s_bytes */
+    int r_need_zero = (r_bytes[0] & 0x80) ? 1 : 0;
+    int s_need_zero = (s_bytes[0] & 0x80) ? 1 : 0;
+    int r_mpint_len = r_real + r_need_zero;
+    int s_mpint_len = s_real + s_need_zero;
+    int total = 4 + r_mpint_len + 4 + s_mpint_len;
+    if (total > *sig_len) return 0;
+    int wpos = 0;
+    /* mpint r */
+    sig[wpos++] = (unsigned char)((uint32_t)r_mpint_len >> 24);
+    sig[wpos++] = (unsigned char)((uint32_t)r_mpint_len >> 16);
+    sig[wpos++] = (unsigned char)((uint32_t)r_mpint_len >> 8);
+    sig[wpos++] = (unsigned char)((uint32_t)r_mpint_len);
+    if (r_need_zero) sig[wpos++] = 0x00;
+    memcpy(sig + wpos, r_bytes, (size_t)r_real); wpos += r_real;
+    /* mpint s */
+    sig[wpos++] = (unsigned char)((uint32_t)s_mpint_len >> 24);
+    sig[wpos++] = (unsigned char)((uint32_t)s_mpint_len >> 16);
+    sig[wpos++] = (unsigned char)((uint32_t)s_mpint_len >> 8);
+    sig[wpos++] = (unsigned char)((uint32_t)s_mpint_len);
+    if (s_need_zero) sig[wpos++] = 0x00;
+    memcpy(sig + wpos, s_bytes, (size_t)s_real); wpos += s_real;
+    *sig_len = wpos;
     return 1;
   }
 
@@ -1152,10 +1190,18 @@ static EVP_PKEY *build_ecdsa_pkey(const char *group,
   if (!bld) { EVP_PKEY_CTX_free(ctx); return 0; }
   OSSL_PARAM_BLD_push_utf8_string(bld, "group", group, 0);
   OSSL_PARAM_BLD_push_octet_string(bld, "pub", pub, (size_t)pub_len);
-  if (priv && priv_len > 0)
-    OSSL_PARAM_BLD_push_octet_string(bld, "priv", priv, (size_t)priv_len);
+  /* OpenSSL 3.x EC provider expects "priv" as a BIGNUM (integer),
+   * not an octet string — using octet_string causes
+   * "param of incompatible type" (error:07800081). */
+  BIGNUM *bn_priv = 0;
+  if (priv && priv_len > 0) {
+    bn_priv = BN_bin2bn(priv, priv_len, 0);
+    if (!bn_priv) { OSSL_PARAM_BLD_free(bld); EVP_PKEY_CTX_free(ctx); return 0; }
+    OSSL_PARAM_BLD_push_BN(bld, "priv", bn_priv);
+  }
   const void *params = OSSL_PARAM_BLD_to_param(bld);
   OSSL_PARAM_BLD_free(bld);
+  if (bn_priv) BN_free(bn_priv);
   if (!params) { EVP_PKEY_CTX_free(ctx); return 0; }
   if (EVP_PKEY_fromdata_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return 0; }
   int sel = (priv && priv_len > 0) ? SEL_KEYPAIR : SEL_PUBLIC_KEY;
