@@ -430,7 +430,7 @@ moon coverage analyze > uncovered.log
 
 | 版本 | 内容 | 状态 |
 |------|------|------|
-| **v0.1**（当前 v0.1.1） | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
+| **v0.1**（当前 v0.1.2） | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
 | **v0.2** | shell 交互式 I/O（stdin 转发）；pty-req 对接 Client 高层 API；端口转发；SFTP 协议层 | 📋 待开发 |
 | **v1.0** | 文档补全 + CI 矩阵（Linux/macOS/Windows）+ 发布到 mooncakes.io | 📋 待开发 |
 
@@ -446,7 +446,7 @@ moon coverage analyze > uncovered.log
 |------|------|------|------|
 | Linux glibc | ✅ | ✅ | 完全支持 |
 | macOS | ✅ | ✅ | 完全支持 |
-| Windows MinGW (Winsock2) | ✅ | ⚠️ | 编译通过；`src/socket` 自带 Winsock 初始化；KEX/Crypto 操作需非 Windows 主机 |
+| Windows MinGW (Winsock2) | ✅ | ✅ | 完全支持 |
 
 ## 10. 引用
 
