@@ -24,8 +24,8 @@ jobs:
 
       - name: Moon test
         run: |
-          moon coverage report -f summary
           moon test --enable-coverage
+          moon coverage report -f summary
 
       - name: Make scripts executable
         run: |
