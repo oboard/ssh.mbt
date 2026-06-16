@@ -13,6 +13,8 @@ RUN curl -fsSL https://github.com/SaladDay/cc-switch-cli/releases/latest/downloa
 
 ENV PATH="/root/.local/bin:$PATH"
 
+ENV workspace="/workspace"
+
 RUN code-server --install-extension tamasfe.even-better-toml \
      && code-server --install-extension usernamehw.errorlens \
      && code-server --install-extension chanhx.crabviz \
