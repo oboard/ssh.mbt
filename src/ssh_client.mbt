@@ -206,7 +206,10 @@ pub fn Client::auth_publickey(
   // 防止 .pub 文件声明的算法和私钥类型不匹配
   // RSA 公钥 blob 始终使用 'ssh-rsa'，但签名算法可以是 'rsa-sha2-256' 或 'rsa-sha2-512'（RFC 8332）
   let alg_compatible = pub_alg == pubkey_alg ||
-    (pub_alg == "ssh-rsa" && (pubkey_alg == "rsa-sha2-256" || pubkey_alg == "rsa-sha2-512"))
+    (
+      pub_alg == "ssh-rsa" &&
+      (pubkey_alg == "rsa-sha2-256" || pubkey_alg == "rsa-sha2-512")
+    )
   if !alg_compatible {
     raise ProtocolError(
       "auth: pubkey file declares '\{pub_alg}' but private key is '\{pubkey_alg}'",
@@ -816,34 +819,6 @@ fn compute_mac_s2c(client : Client, data : Bytes) -> Bytes raise SshError {
   mac_ctx.hmac_on(seq_bytes + data) catch {
     e => raise ProtocolError("MAC compute s2c: \{e}")
   }
-}
-
-///|
-fn verify_mac(
-  client : Client,
-  data : Bytes,
-  expected_tag : Bytes,
-) -> Unit raise SshError {
-  let mac_ctx = match client.mac_s2c {
-    Some(m) => m
-    None => return
-  }
-  let seq_bytes = encode_uint32(client.seq_recv.reinterpret_as_int())
-  let full_input = seq_bytes + data
-  // Use hmac_on to bypass internal Array[Byte] buffer
-  let computed = mac_ctx.hmac_on(full_input) catch {
-    e => raise ProtocolError("MAC: \{e}")
-  }
-  debug(
-    "* verify_mac: seq_recv=\{client.seq_recv}, data_len=\{data.length()}, tag_len=\{expected_tag.length()}, computed_len=\{computed.length()}",
-  )
-  hex_dump("  MAC input (seq || data)", full_input)
-  hex_dump("  expected MAC", expected_tag)
-  hex_dump("  computed MAC", computed)
-  if computed != expected_tag {
-    raise MacMismatch
-  }
-  client.seq_recv = client.seq_recv + 1U
 }
 
 ///|
