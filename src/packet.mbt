@@ -178,7 +178,7 @@ pub fn Writer::write_name_list(self : Writer, names : Array[String]) -> Unit {
 
 ///|
 pub fn Writer::write_mpint(self : Writer, n : @bigint.BigInt) -> Unit {
-  let bytes = n.to_octets() catch { _ => b"" }
+  let bytes = n.to_octets()
   if bytes.length() == 0 {
     self.write_string(b"\x00")
     return

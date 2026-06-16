@@ -681,14 +681,14 @@ fn KexContext::drive_dh(
 
   // f. K = f^x mod p
   let k = f.pow(x_bi, modulus=p)
-  let k_bytes = k.to_octets() catch { _ => b"" }
+  let k_bytes = k.to_octets()
 
   self.shared_secret = k_bytes
 
   // g. 计算 H
   let hash_alg = hash_alg_for_kex(self.kex_alg)
-  let e_bytes = e.to_octets() catch { _ => b"" }
-  let f_bytes = f.to_octets() catch { _ => b"" }
+  let e_bytes = e.to_octets()
+  let f_bytes = f.to_octets()
   self.exchange_hash = compute_dh_exchange_hash(
     hash_alg,
     self.v_c,
