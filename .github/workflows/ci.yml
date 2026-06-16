@@ -20,13 +20,10 @@ jobs:
         run: |
           apt-get update && apt-get install -y gcc libssl-dev
           curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash
-          echo $PATH
-          export PATH="$HOME/.moon/bin:$PATH"
-          echo $PATH
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Moon test
         run: |
-          echo $PATH
           moon coverage report -f summary
           moon test --enable-coverage
 
