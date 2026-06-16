@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x -R script || true
+          chmod +x -R cmd || true
+
+      # =========================
+      # 1. run ssh-server scripts
+      # =========================
+      - name: Run ssh-server scripts
+        run: |
+          set -e
+
+          echo "Running ssh-server scripts..."
+
+          for f in script/ssh-server/*.sh; do
+            echo "==> Running $f"
+            bash "$f"
+          done
+
+      # =========================
+      # 2. run cmd/*/run.sh sequentially
+      # =========================
+      - name: Run cmd modules sequentially
+        run: |
+          set -e
+
+          echo "Running cmd run.sh..."
+
+          for d in cmd/*; do
+            if [ -f "$d/run.sh" ]; then
+              echo "==> Running $d/run.sh"
+              bash "$d/run.sh"
+            fi
+          done
