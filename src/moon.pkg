@@ -10,6 +10,7 @@ options(
     "log.mbt": [ "native" ],
     "packet.mbt": [ "native" ],
     "kex.mbt": [ "native" ],
+    "kex_wbtest.mbt": [ "native" ],
     "auth.mbt": [ "native" ],
     "channel.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],

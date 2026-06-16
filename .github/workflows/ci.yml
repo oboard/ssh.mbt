@@ -24,8 +24,13 @@ jobs:
 
       - name: Moon test
         run: |
+          echo moon test
           moon test --enable-coverage
           moon coverage report -f summary
+
+          echo moon test native
+          moon test --target native --enable-coverage
+          moon coverage --target native report -f summary
 
       - name: Run ssh-server scripts, start ssh server
         run: |
