@@ -41,26 +41,18 @@ jobs:
             bash "$f"
           done
 
-          cd ../..
-
       - name: Run cmd modules sequentially, run moon connect to ssh server
         run: |
           set -e
 
-          pwd
           echo "Running cmd run.sh..."
 
           for d in cmd/*; do
             if [ -f "$d/run.sh" ]; then
               echo "==> Running $d/run.sh"
-              pwd
-              echo $d
               cd $d
-              chmod +x run.sh"
-              bash "run.sh"
+              chmod +x run.sh
+              bash run.sh
               cd ..
             fi
           done
-          pwd
-          cd ..
-          pwd
