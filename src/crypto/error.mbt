@@ -1,5 +1,6 @@
 ///|
 /// 密码学操作中的错误类型。
+#warnings("-unused_constructor")
 pub suberror CryptoError {
   /// 随机数生成失败。
   RandomFailed(String)
