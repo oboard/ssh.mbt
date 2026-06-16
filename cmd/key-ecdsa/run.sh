@@ -5,7 +5,7 @@ set -e
 source .env
 set +a
 
-export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --exec 'uname -a' --key /workspace/scripts/ssh-server/id_ecdsa"
+export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --exec 'uname -a' --key ${workspace}/scripts/ssh-server/id_ecdsa"
 
 # export MOONBIT_SSH_DEBUG="true"
 

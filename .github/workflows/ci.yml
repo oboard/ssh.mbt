@@ -46,6 +46,7 @@ jobs:
           set -e
 
           echo "Running cmd run.sh..."
+          export workspace=$(pwd)
 
           for d in cmd/*; do
             if [ -f "$d/run.sh" ]; then
