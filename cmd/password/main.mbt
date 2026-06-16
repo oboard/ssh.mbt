@@ -1,7 +1,6 @@
 ///|
 /// MoonSSH 命令行客户端。
 fn main {
-  // 检查环境变量 MOONBIT_SSH_DEBUG
   let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
   if env_debug == "1" || env_debug == "true" {
     @src.enable_debug()

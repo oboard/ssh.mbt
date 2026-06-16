@@ -1,5 +1,5 @@
 ///|
-/// MoonSSH 命令行客户端 — RSA 公钥认证版本。
+/// MoonSSH 命令行客户端 — 公钥认证版本。
 fn main {
   let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
   if env_debug == "1" || env_debug == "true" {
@@ -9,7 +9,7 @@ fn main {
   let argv = @utils.get_argv()
   if argv.length() == 0 {
     println(
-      "usage: moonssh-key-rsa user@host [-p port] [-l user] [--key PATH] [--exec CMD] [--debug]",
+      "usage: moonssh- user@host [-p port] [-l user] [--key PATH] [--exec CMD] [--debug]",
     )
     abort("no arguments")
   }
