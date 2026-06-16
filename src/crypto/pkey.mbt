@@ -201,12 +201,6 @@ pub fn PKey::key_id(self : PKey) -> Int {
 }
 
 ///|
-/// 包内使用：获取原始指针。
-fn PKey::raw_ptr(self : PKey) -> Pkey {
-  self.ptr
-}
-
-///|
 /// 通用签名。
 /// `md_alg`：
 ///   0 -> 使用密钥自己的签名方案（EdDSA 用于 ed25519）

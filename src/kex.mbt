@@ -649,9 +649,7 @@ fn KexContext::drive_dh(
   let x_bytes = @crypto.rand_bytes(256) catch {
     e => raise ProtocolError("kex: rand: \{e}")
   }
-  let x_bi = @bigint.BigInt::from_octets(x_bytes) catch {
-    _ => raise ProtocolError("kex: invalid x")
-  }
+  let x_bi = @bigint.BigInt::from_octets(x_bytes)
   let two = @bigint.BigInt::from_int(2)
   let x_bi = if x_bi % two == @bigint.BigInt::from_int(0) {
     x_bi + two

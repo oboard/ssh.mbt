@@ -655,9 +655,7 @@ void moonbitlang_ssh_bn_free(void *bn) { if (bn) BN_free((BIGNUM *)bn); }
 int moonbitlang_ssh_bn_bin2bn(const unsigned char *buf, int len, void *bn) {
   return BN_bin2bn(buf, len, (BIGNUM *)bn) != 0;
 }
-int moonbitlang_ssh_bn_bn2bin(void *bn, unsigned char *buf) {
-  return BN_bn2bin((BIGNUM *)bn, buf);
-}
+
 int moonbitlang_ssh_bn_bn2binpad(void *bn, unsigned char *buf, int len) {
   return BN_bn2binpad((BIGNUM *)bn, buf, len);
 }

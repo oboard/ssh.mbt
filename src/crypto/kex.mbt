@@ -17,10 +17,6 @@ extern "C" fn bn_bin2bn_ffi(buf : Bytes, len : Int, bn : Bn) -> Int = "moonbitla
 
 ///|
 #borrow(buf)
-extern "C" fn bn_bn2bin_ffi(bn : Bn, buf : FixedArray[Byte]) -> Int = "moonbitlang_ssh_bn_bn2bin"
-
-///|
-#borrow(buf)
 extern "C" fn bn_bn2binpad_ffi(
   bn : Bn,
   buf : FixedArray[Byte],
@@ -77,7 +73,7 @@ pub fn dh_group14_generator() -> @bigint.BigInt {
 ///|
 pub fn dh_group14_keygen(
   x : @bigint.BigInt,
-) -> (@bigint.BigInt, @bigint.BigInt) raise CryptoError {
+) -> (@bigint.BigInt, @bigint.BigInt) {
   let p = dh_group14_prime()
   let g = dh_group14_generator()
   let public_value = g.pow(x, modulus=p)
@@ -88,7 +84,7 @@ pub fn dh_group14_keygen(
 pub fn dh_group14_shared(
   x : @bigint.BigInt,
   peer_pub : @bigint.BigInt,
-) -> @bigint.BigInt raise CryptoError {
+) -> @bigint.BigInt {
   let p = dh_group14_prime()
   peer_pub.pow(x, modulus=p)
 }

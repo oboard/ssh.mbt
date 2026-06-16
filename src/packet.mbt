@@ -102,9 +102,7 @@ pub fn Reader::read_mpint(self : Reader) -> @bigint.BigInt raise SshError {
   if bytes_val.length() == 0 {
     return @bigint.BigInt::from_int(0)
   }
-  @bigint.BigInt::from_octets(bytes_val) catch {
-    e => raise ParseError("mpint: \{e}")
-  }
+  @bigint.BigInt::from_octets(bytes_val)
 }
 
 ///|
