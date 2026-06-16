@@ -33,9 +33,11 @@ jobs:
 
           echo "Running ssh-server scripts..."
 
-          for f in scripts/ssh-server/*.sh; do
+          cd scripts/ssh-server/
+          chmod +x *.sh
+          
+          for f in *.sh; do
             echo "==> Running $f"
-            chmod +x $f
             bash "$f"
           done
 
@@ -48,7 +50,9 @@ jobs:
           for d in cmd/*; do
             if [ -f "$d/run.sh" ]; then
               echo "==> Running $d/run.sh"
-              chmod +x $d/run.sh"
-              bash "$d/run.sh"
+              cd $d
+              chmod +x run.sh"
+              bash "run.sh"
+              cd ..
             fi
           done
