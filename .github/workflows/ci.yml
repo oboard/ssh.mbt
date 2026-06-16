@@ -16,6 +16,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Moon test
+        run: |
+          moon coverage report -f summary
+          moon test --enable-coverage
+
       - name: Make scripts executable
         run: |
           chmod +x -R script || true
