@@ -2,20 +2,6 @@
 /// SSH 传输层包读写（RFC 4253 §6）。
 /// 包含 Reader / Writer 以及包帧化函数。
 
-///|
-/// SSH 协议层错误。
-pub suberror SshError {
-  IoError(String)
-  ConnectionClosed
-  ProtocolError(String)
-  MacMismatch
-  NotEncrypted
-  HostKeyMismatch(String)
-  AuthFailed(String)
-  RequestDenied(String)
-  ParseError(String)
-} derive(Show, Eq)
-
 // ============== Reader ==============
 
 ///|
