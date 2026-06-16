@@ -39,7 +39,7 @@ fn pattern_matches(pat : String, host : String) -> Bool {
   if pat.has_prefix("|1|") {
     return false
   } // hashed form not supported
-  if not(pat.contains("*") || pat.contains("?")) {
+  if !(pat.contains("*") || pat.contains("?")) {
     return pat == host
   }
   wildcard_match(pat, host)
@@ -94,14 +94,14 @@ pub fn parse_line(line : String) -> KnownHost? raise SshError {
   let parts = trimmed.split(" ")
   let arr : Array[String] = []
   for v in parts {
-    arr.push(v.to_string())
+    arr.push(v.to_owned())
   }
   if arr.length() < 3 {
     return None
   }
   let patterns = []
   for p in arr[0].split(",") {
-    let s = p.to_string()
+    let s = p.to_owned()
     if s.length() > 0 {
       patterns.push(s)
     }
@@ -117,7 +117,7 @@ pub fn parse_line(line : String) -> KnownHost? raise SshError {
 pub fn parse_file(content : String) -> Array[KnownHost] raise SshError {
   let out : Array[KnownHost] = []
   for line in content.split("\n") {
-    match parse_line(line.to_string()) {
+    match parse_line(line.to_owned()) {
       Some(entry) => out.push(entry)
       None => ()
     }
@@ -209,7 +209,7 @@ pub fn encode_base64(bytes : Bytes) -> String {
 ///|
 fn make_b64_decode_table() -> Map[Char, Int] {
   let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-  let m : Map[Char, Int] = Map::new()
+  let m : Map[Char, Int] = Map([])
   let mut i = 0
   while i < 64 {
     m.set(alphabet.unsafe_get(i).unsafe_to_char(), i)
