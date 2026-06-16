@@ -124,6 +124,7 @@ pub struct AuthContext {
 }
 
 ///|
+#warnings("-unused_constructor")
 pub enum AuthState {
   Idle
   AwaitingReply

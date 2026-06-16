@@ -6,6 +6,7 @@
 ///|
 /// SSH 错误。所有公开 API 抛出的异常都应是 `SshError` 的实例，
 /// 调用方可通过 `match` 分支进行细粒度处理。
+#warnings("-unused_constructor")
 pub suberror SshError {
   ///
   /// 底层 I/O 失败（socket 读写、网络中断等）。

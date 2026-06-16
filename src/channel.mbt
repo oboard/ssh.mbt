@@ -39,6 +39,7 @@ pub const MSG_CHANNEL_FAILURE : Byte = b'\x64' // 100
 // ============== Channel ==============
 
 ///|
+#warnings("-unused_field")
 pub struct Channel {
   priv id : Int
   mut peer_id : Int
@@ -54,6 +55,7 @@ pub struct Channel {
 }
 
 ///|
+#warnings("-unused_constructor")
 pub enum ChannelState {
   Closed
   Opening
