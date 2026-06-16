@@ -13,22 +13,22 @@ pub fn CipherAlgorithm::aes128_ctr() -> CipherAlgorithm {
 }
 
 ///|
-pub fn CipherAlgorithm::id(self : CipherAlgorithm) -> Int {
+pub fn CipherAlgorithm::id(_self : CipherAlgorithm) -> Int {
   1
 }
 
 ///|
-pub fn CipherAlgorithm::key_len(self : CipherAlgorithm) -> Int {
+pub fn CipherAlgorithm::key_len(_self : CipherAlgorithm) -> Int {
   16
 }
 
 ///|
-pub fn CipherAlgorithm::iv_len(self : CipherAlgorithm) -> Int {
+pub fn CipherAlgorithm::iv_len(_self : CipherAlgorithm) -> Int {
   16
 }
 
 ///|
-pub fn CipherAlgorithm::block_len(self : CipherAlgorithm) -> Int {
+pub fn CipherAlgorithm::block_len(_self : CipherAlgorithm) -> Int {
   // RFC 4253 §6: packet size MUST be a multiple of the cipher block size
   // or 8, whichever is larger. For AES-128-CTR, the cipher block size is 16.
   // Using 8 causes packets like CHANNEL_OPEN (40 bytes) to not be a multiple

@@ -88,7 +88,7 @@ pub fn Reader::read_name_list(self : Reader) -> Array[String] raise SshError {
   }
   let out : Array[String] = []
   for view in s.split(",") {
-    let name = view.to_string()
+    let name = view.to_owned()
     if name.length() > 0 {
       out.push(name)
     }
@@ -207,7 +207,6 @@ pub const MAX_PACKET : Int = 256 * 1024
 /// 读取一个 SSH 包。
 pub fn read_packet(
   read_exact : (Int) -> Bytes raise SshError,
-  block_size : Int,
   mac_size : Int,
   decrypt : (Bytes) -> Bytes raise SshError,
   verify_mac : (Bytes, Bytes) -> Unit raise SshError,
@@ -257,7 +256,6 @@ pub fn read_packet(
   if 1 + padding_length > plaintext.length() {
     raise ProtocolError("read_packet: padding_length too large")
   }
-  let payload_len = plaintext.length() - 1 - padding_length
   match
     Bytes::get_view(plaintext, start=1, end=plaintext.length() - padding_length) {
     Some(v) => BytesView::to_owned(v)

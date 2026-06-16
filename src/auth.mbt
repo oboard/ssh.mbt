@@ -210,7 +210,7 @@ pub fn AuthContext::build_keyboard_interactive(self : AuthContext) -> Bytes {
 
 ///|
 pub fn AuthContext::build_info_response(
-  self : AuthContext,
+  _self : AuthContext,
   responses : Array[String],
 ) -> Bytes {
   let w = Writer::new()
