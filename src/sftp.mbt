@@ -8,109 +8,141 @@
 const SSH_FXP_INIT : Byte = b'\x01'
 
 ///|
+/// SFTP 操作码：OPEN（3），打开文件。
 const SSH_FXP_OPEN : Byte = b'\x03'
 
 ///|
+/// SFTP 操作码：CLOSE（4），关闭文件句柄。
 const SSH_FXP_CLOSE : Byte = b'\x04'
 
 ///|
+/// SFTP 操作码：READ（5），读文件。
 const SSH_FXP_READ : Byte = b'\x05'
 
 ///|
+/// SFTP 操作码：WRITE（6），写文件。
 const SSH_FXP_WRITE : Byte = b'\x06'
 
 ///|
+/// SFTP 操作码：SETSTAT（9），设置文件属性。
 const SSH_FXP_SETSTAT : Byte = b'\x09'
 
 ///|
+/// SFTP 操作码：OPENDIR（11），打开目录。
 const SSH_FXP_OPENDIR : Byte = b'\x0b'
 
 ///|
+/// SFTP 操作码：READDIR（12），读取目录条目。
 const SSH_FXP_READDIR : Byte = b'\x0c'
 
 ///|
+/// SFTP 操作码：REMOVE（13），删除文件。
 const SSH_FXP_REMOVE : Byte = b'\x0d'
 
 ///|
+/// SFTP 操作码：MKDIR（14），创建目录。
 const SSH_FXP_MKDIR : Byte = b'\x0e'
 
 ///|
+/// SFTP 操作码：RMDIR（15），删除目录。
 const SSH_FXP_RMDIR : Byte = b'\x0f'
 
 ///|
+/// SFTP 操作码：REALPATH（16），解析真实路径。
 const SSH_FXP_REALPATH : Byte = b'\x10'
 
 ///|
+/// SFTP 操作码：STAT（17），获取文件属性。
 const SSH_FXP_STAT : Byte = b'\x11'
 
 ///|
+/// SFTP 操作码：RENAME（18），重命名文件。
 const SSH_FXP_RENAME : Byte = b'\x12'
 
 // 响应类型
 
 ///|
+/// SFTP 响应码：VERSION（2），版本协商响应。
 const SSH_FXP_VERSION : Byte = b'\x02'
 
 ///|
+/// SFTP 响应码：STATUS（101），操作状态响应。
 const SSH_FXP_STATUS : Byte = b'\x65'
 
 ///|
+/// SFTP 响应码：HANDLE（102），文件句柄响应。
 const SSH_FXP_HANDLE : Byte = b'\x66'
 
 ///|
+/// SFTP 响应码：DATA（103），读取数据响应。
 const SSH_FXP_DATA : Byte = b'\x67'
 
 ///|
+/// SFTP 响应码：NAME（104），文件名/路径响应。
 const SSH_FXP_NAME : Byte = b'\x68'
 
 ///|
+/// SFTP 响应码：ATTRS（105），文件属性响应。
 const SSH_FXP_ATTRS : Byte = b'\x69'
 
 // SSH_FXP_STATUS 错误码
 
 ///|
+/// SFTP 状态码：OK（0），操作成功。
 const SSH_FX_OK : Int = 0
 
 ///|
+/// SFTP 状态码：EOF（1），到达文件末尾。
 const SSH_FX_EOF : Int = 1
 
 // 文件打开标志
 
 ///|
+/// 文件打开标志：只读。
 pub const SSH_FXF_READ : Int = 0x00000001
 
 ///|
+/// 文件打开标志：只写。
 pub const SSH_FXF_WRITE : Int = 0x00000002
 
 ///|
+/// 文件打开标志：追加模式。
 pub const SSH_FXF_APPEND : Int = 0x00000004
 
 ///|
+/// 文件打开标志：不存在则创建。
 pub const SSH_FXF_CREAT : Int = 0x00000008
 
 ///|
+/// 文件打开标志：截断已有文件。
 pub const SSH_FXF_TRUNC : Int = 0x00000010
 
 ///|
+/// 文件打开标志：排他创建（文件必须不存在）。
 pub const SSH_FXF_EXCL : Int = 0x00000020
 
 // 文件属性 flags
 
 ///|
+/// 文件属性标志：包含 size 字段。
 const SSH_FILEXFER_ATTR_SIZE : Int = 0x00000001
 
 ///|
+/// 文件属性标志：包含 uid/gid 字段。
 const SSH_FILEXFER_ATTR_UIDGID : Int = 0x00000002
 
 ///|
+/// 文件属性标志：包含 permissions 字段。
 const SSH_FILEXFER_ATTR_PERMISSIONS : Int = 0x00000004
 
 ///|
+/// 文件属性标志：包含 atime/mtime 字段。
 const SSH_FILEXFER_ATTR_ACMODTIME : Int = 0x00000008
 
 // SFTP 协议版本
 
 ///|
+/// SFTP 协议版本（version 3）。
 const SFTP_VERSION : Int = 3
 
 // ============== 数据结构 ==============

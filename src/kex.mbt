@@ -12,6 +12,8 @@
 
 // ============== Algorithm lists ==============
 
+///|
+/// 返回客户端支持的密钥交换算法列表（按优先级排序）。
 pub fn kex_algorithms() -> Array[String] {
   [
     "ext-info-c", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256", "diffie-hellman-group14-sha1",
@@ -19,6 +21,7 @@ pub fn kex_algorithms() -> Array[String] {
 }
 
 ///|
+/// 返回客户端支持的 host key 算法列表（按优先级排序）。
 pub fn server_host_key_algorithms() -> Array[String] {
   [
     "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519",
@@ -27,16 +30,19 @@ pub fn server_host_key_algorithms() -> Array[String] {
 }
 
 ///|
+/// 返回客户端支持的加密算法列表。
 pub fn encryption_algorithms() -> Array[String] {
   ["aes128-ctr"]
 }
 
 ///|
+/// 返回客户端支持的 MAC 算法列表（按优先级排序）。
 pub fn mac_algorithms() -> Array[String] {
   ["hmac-sha2-256", "hmac-sha1"]
 }
 
 ///|
+/// 返回客户端支持的压缩算法列表（仅 `"none"`，即不压缩）。
 pub fn compression_algorithms() -> Array[String] {
   ["none"]
 }
@@ -44,38 +50,50 @@ pub fn compression_algorithms() -> Array[String] {
 // ============== Message types ==============
 
 ///|
+/// SSH 消息号：KEXINIT（20），密钥交换初始化。
 pub const SSH_MSG_KEXINIT : Byte = b'\x14'
 
 ///|
+/// SSH 消息号：NEWKEYS（21），通知对端开始使用新密钥。
 pub const SSH_MSG_NEWKEYS : Byte = b'\x15'
 
 ///|
+/// SSH 消息号：KEX_ECDH_INIT（30），ECDH 客户端公钥。
 pub const SSH_MSG_KEX_ECDH_INIT : Byte = b'\x1e'
 
 ///|
+/// SSH 消息号：KEX_ECDH_REPLY（31），ECDH 服务端公钥 + 签名。
 pub const SSH_MSG_KEX_ECDH_REPLY : Byte = b'\x1f'
 
 ///|
+/// SSH 消息号：KEX_DH_INIT（30），DH 客户端公钥。
 pub const SSH_MSG_KEX_DH_INIT : Byte = b'\x1e'
 
 ///|
+/// SSH 消息号：KEX_DH_REPLY（31），DH 服务端公钥 + 签名。
 pub const SSH_MSG_KEX_DH_REPLY : Byte = b'\x1f'
 
 ///|
+/// SSH 消息号：DISCONNECT（1），断开连接。
 pub const SSH_MSG_DISCONNECT : Byte = b'\x01'
 
 ///|
+/// SSH 消息号：IGNORE（2），可忽略的填充消息。
 pub const SSH_MSG_IGNORE : Byte = b'\x02'
 
 ///|
+/// SSH 消息号：DEBUG（4），调试信息。
 pub const SSH_MSG_DEBUG : Byte = b'\x04'
 
 ///|
+/// SSH 消息号：EXT_INFO（7），扩展信息（RFC 8308）。
 pub const SSH_MSG_EXT_INFO : Byte = b'\x07'
 
 // ============== KEXINIT ==============
 
 ///|
+/// 解析后的 KEXINIT 消息（RFC 4253 §7.1）。
+/// 包含双端协商的算法列表。
 pub struct KexInit {
   cookie : Bytes
   kex_algs : Array[String]
@@ -89,6 +107,8 @@ pub struct KexInit {
 }
 
 ///|
+/// 构建 SSH_MSG_KEXINIT 消息体（含消息号）。
+/// `cookie` 为 16 字节随机数。
 pub fn build_kexinit_payload(cookie : Bytes) -> Bytes {
   let w = Writer::new()
   w.write_byte(SSH_MSG_KEXINIT)
@@ -109,6 +129,7 @@ pub fn build_kexinit_payload(cookie : Bytes) -> Bytes {
 }
 
 ///|
+/// 解析服务端 KEXINIT 消息体，返回 [KexInit] 结构。
 pub fn parse_kexinit(payload : Bytes) -> KexInit raise SshError {
   let r = Reader::new(payload)
   let msg = r.read_byte()
@@ -142,6 +163,7 @@ pub fn parse_kexinit(payload : Bytes) -> KexInit raise SshError {
 }
 
 ///|
+/// 从客户端列表中选择第一个同时出现在服务端列表中的算法。
 fn pick_first(ours : Array[String], server : Array[String]) -> String? {
   for alg in ours {
     for srv in server {
@@ -154,26 +176,31 @@ fn pick_first(ours : Array[String], server : Array[String]) -> String? {
 }
 
 ///|
+/// 协商第一个双方都支持的密钥交换算法。
 pub fn KexInit::first(self : KexInit) -> String? {
   pick_first(kex_algorithms(), self.kex_algs)
 }
 
 ///|
+/// 协商第一个双方都支持的 host key 算法。
 pub fn KexInit::first_host_key(self : KexInit) -> String? {
   pick_first(server_host_key_algorithms(), self.host_key_algs)
 }
 
 ///|
+/// 协商第一个双方都支持的加密算法（s2c 方向）。
 pub fn KexInit::first_enc(self : KexInit) -> String? {
   pick_first(encryption_algorithms(), self.enc_s2c)
 }
 
 ///|
+/// 协商第一个双方都支持的 MAC 算法（s2c 方向）。
 pub fn KexInit::first_mac(self : KexInit) -> String? {
   pick_first(mac_algorithms(), self.mac_s2c)
 }
 
 ///|
+/// 协商第一个双方都支持的压缩算法（s2c 方向）。
 pub fn KexInit::first_comp(self : KexInit) -> String? {
   pick_first(compression_algorithms(), self.comp_s2c)
 }
@@ -181,6 +208,7 @@ pub fn KexInit::first_comp(self : KexInit) -> String? {
 // ============== ECDH helpers ==============
 
 ///|
+/// 构建 SSH_MSG_KEX_ECDH_INIT 消息体（含消息号），携带客户端 ECDH 公钥。
 pub fn build_ecdh_init_payload(client_public : Bytes) -> Bytes {
   let w = Writer::new()
   w.write_byte(SSH_MSG_KEX_ECDH_INIT)
@@ -189,6 +217,7 @@ pub fn build_ecdh_init_payload(client_public : Bytes) -> Bytes {
 }
 
 ///|
+/// 解析后的 SSH_MSG_KEX_ECDH_REPLY 消息。
 pub struct EcdhReply {
   host_key : Bytes
   server_public : Bytes
@@ -196,6 +225,7 @@ pub struct EcdhReply {
 }
 
 ///|
+/// 解析 SSH_MSG_KEX_ECDH_REPLY 消息体。
 pub fn parse_ecdh_reply_payload(payload : Bytes) -> EcdhReply raise SshError {
   let r = Reader::new(payload)
   let msg = r.read_byte()
@@ -211,6 +241,7 @@ pub fn parse_ecdh_reply_payload(payload : Bytes) -> EcdhReply raise SshError {
 // ============== DH helpers ==============
 
 ///|
+/// 解析后的 SSH_MSG_KEX_DH_REPLY 消息。
 pub struct DhReply {
   host_key : Bytes
   f : @bigint.BigInt
@@ -218,6 +249,7 @@ pub struct DhReply {
 }
 
 ///|
+/// 解析 SSH_MSG_KEX_DH_REPLY 消息体。
 pub fn parse_dh_reply_payload(payload : Bytes) -> DhReply raise SshError {
   let r = Reader::new(payload)
   let msg = r.read_byte()
@@ -231,6 +263,7 @@ pub fn parse_dh_reply_payload(payload : Bytes) -> DhReply raise SshError {
 }
 
 ///|
+/// 构建 SSH_MSG_KEX_DH_INIT 消息体（含消息号），携带客户端 DH 公钥。
 pub fn build_dh_init_payload(e : @bigint.BigInt) -> Bytes {
   let w = Writer::new()
   w.write_byte(SSH_MSG_KEX_DH_INIT)
@@ -241,12 +274,14 @@ pub fn build_dh_init_payload(e : @bigint.BigInt) -> Bytes {
 // ============== Signature helpers ==============
 
 ///|
+/// SSH 签名 blob（算法名 + 原始签名）。
 pub struct SignatureBlob {
   alg : String
   sig : Bytes
 }
 
 ///|
+/// 解析 SSH signature blob，提取算法名和原始签名。
 pub fn parse_signature_blob(blob : Bytes) -> SignatureBlob raise SshError {
   let r = Reader::new(blob)
   let alg = r.read_string_as_str()
@@ -255,17 +290,20 @@ pub fn parse_signature_blob(blob : Bytes) -> SignatureBlob raise SshError {
 }
 
 ///|
+/// 从 host key blob 中提取算法名（第一个 string 字段）。
 pub fn parse_host_key_algorithm(blob : Bytes) -> String raise SshError {
   let r = Reader::new(blob)
   r.read_string_as_str()
 }
 
 ///|
+/// 构建 SSH_MSG_NEWKEYS 消息体（单字节 0x15）。
 pub fn build_newkeys_payload() -> Bytes {
   b"\x15"
 }
 
 ///|
+/// 判断消息体是否为 SSH_MSG_NEWKEYS。
 pub fn is_newkeys_payload(payload : Bytes) -> Bool {
   payload.length() == 1 && payload.unsafe_get(0) == SSH_MSG_NEWKEYS
 }
@@ -273,6 +311,7 @@ pub fn is_newkeys_payload(payload : Bytes) -> Bool {
 // ============== Exchange hash ==============
 
 ///|
+/// 计算 ECDH 密钥交换的交换哈希 H（RFC 5656）。
 pub fn compute_ecdh_exchange_hash(
   hash_alg : @crypto.Algorithm,
   v_c : Bytes,
@@ -293,6 +332,7 @@ pub fn compute_ecdh_exchange_hash(
 }
 
 ///|
+/// 计算 DH 密钥交换的交换哈希 H（RFC 4253 §8）。
 pub fn compute_dh_exchange_hash(
   hash_alg : @crypto.Algorithm,
   v_c : Bytes,
@@ -331,6 +371,8 @@ fn update_exchange_prefix(
 // ============== Key derivation (RFC 4253 §7.2) ==============
 
 ///|
+/// KEX 完成后派生的会话密钥（RFC 4253 §7.2）。
+/// 包含 IV、加密密钥和 MAC 密钥各一对（c2s / s2c）。
 pub struct DerivedKeys {
   iv_c2s : Bytes
   iv_s2c : Bytes
@@ -341,6 +383,7 @@ pub struct DerivedKeys {
 }
 
 ///|
+/// RFC 4253 §7.2 密钥派生：从共享密钥 K、交换哈希 H 和会话 ID 派生 6 组密钥材料。
 pub fn derive_keys(
   hash_alg : @crypto.Algorithm,
   h : Bytes,
@@ -403,6 +446,7 @@ fn kdf(
 // ============== KEX state machine ==============
 
 ///|
+/// KEX 状态机状态。
 pub enum KexState {
   Initial
   SentKexinit
@@ -415,6 +459,7 @@ pub enum KexState {
 } derive(Eq, Debug)
 
 ///|
+/// 密钥交换上下文，保存 KEX 过程中的所有状态和协商结果。
 pub struct KexContext {
   mut state : KexState
   mut kex_alg : String
@@ -435,6 +480,7 @@ pub struct KexContext {
 }
 
 ///|
+/// 创建 KEX 上下文。`v_c` / `v_s` 为客户端 / 服务端版本字符串。
 pub fn KexContext::new(v_c : Bytes, v_s : Bytes) -> KexContext {
   let cookie = kex_random_bytes(16)
   let i_c = build_kexinit_payload(cookie)

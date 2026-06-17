@@ -7,6 +7,8 @@
 ///   - `publickey`      — 公钥认证（两阶段：query → sign）
 ///   - `keyboard-interactive` — 通用 challenge/response
 ///
+
+///|
 /// 所有请求 / 回复均按 SSH 二进制协议帧编码（参见 [packet.mbt]）。
 pub const SERVICE_USERAUTH : String = "ssh-userauth"
 

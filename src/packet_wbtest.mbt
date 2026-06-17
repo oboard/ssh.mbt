@@ -50,14 +50,10 @@ test "reader/read_uint32_big_endian" {
   // 大端序解码 32 位无符号
   let r = Reader::new(Bytes::from_array([b'\x00', b'\x00', b'\x00', b'\x2a']))
   inspect(r.read_uint32(), content="42")
-  let r2 = Reader::new(
-    Bytes::from_array([b'\xff', b'\xff', b'\xff', b'\xff']),
-  )
+  let r2 = Reader::new(Bytes::from_array([b'\xff', b'\xff', b'\xff', b'\xff']))
   // 0xFFFFFFFF reinterpret_as_int = -1
   inspect(r2.read_uint32(), content="-1")
-  let r3 = Reader::new(
-    Bytes::from_array([b'\x80', b'\x00', b'\x00', b'\x00']),
-  )
+  let r3 = Reader::new(Bytes::from_array([b'\x80', b'\x00', b'\x00', b'\x00']))
   // 0x80000000 = -2147483648
   inspect(r3.read_uint32(), content="-2147483648")
 }

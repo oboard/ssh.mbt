@@ -31,6 +31,7 @@ fn load_openssl() -> Unit {
 }
 
 ///|
+/// 确保 OpenSSL 已加载（惰性初始化，仅首次调用时加载）。
 pub fn ensure_openssl() -> Unit {
   load_openssl()
 }

@@ -3,11 +3,13 @@
 /// 算法 id: 1 = aes128-ctr
 
 ///|
+/// 对称加密算法枚举。
 pub enum CipherAlgorithm {
   Aes128Ctr
 } derive(Eq, Debug)
 
 ///|
+/// AES-128-CTR 流加密算法（密钥 16 字节，IV 16 字节）。
 pub fn CipherAlgorithm::aes128_ctr() -> CipherAlgorithm {
   Aes128Ctr
 }
@@ -85,6 +87,7 @@ pub struct Cipher {
 }
 
 ///|
+/// 创建加密或解密上下文。`encrypt=true` 为加密，`false` 为解密。
 pub fn Cipher::new(
   alg : CipherAlgorithm,
   key : Bytes,
@@ -112,6 +115,7 @@ pub fn Cipher::new(
 }
 
 ///|
+/// 对输入数据执行加密或解密（流模式可多次调用）。
 pub fn Cipher::update(self : Cipher, in_ : Bytes) -> Bytes raise CryptoError {
   let in_len = in_.length()
   let out_cap = in_len + self.alg.block_len()
@@ -137,6 +141,7 @@ pub fn Cipher::update(self : Cipher, in_ : Bytes) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 完成加密/解密操作，处理最后的 padding 并释放上下文。
 pub fn Cipher::finalize(self : Cipher) -> Bytes raise CryptoError {
   let out = FixedArray::make(self.alg.block_len(), b'\x00')
   let out_len = Ref(0)
@@ -158,6 +163,7 @@ pub fn Cipher::finalize(self : Cipher) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 释放加密上下文资源。
 pub fn Cipher::close(self : Cipher) -> Unit {
   cipher_ctx_free_ffi(self.ctx)
 }

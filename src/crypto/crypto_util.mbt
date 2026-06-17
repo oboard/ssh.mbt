@@ -14,6 +14,7 @@ extern "C" fn err_clear_error_ffi() = "moonbitlang_ssh_clear_error"
 extern "C" fn err_peek_error_code_ffi() -> UInt = "moonbitlang_ssh_peek_error_code"
 
 ///|
+/// 生成 `num` 字节的密码学安全随机字节。
 pub fn rand_bytes(num : Int) -> Bytes raise CryptoError {
   ensure_openssl()
   let result = FixedArray::make(num, b'\x00')
@@ -26,6 +27,7 @@ pub fn rand_bytes(num : Int) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 获取 OpenSSL 错误队列中最上面的错误信息字符串。
 pub fn err_get_error() -> String {
   let buf = FixedArray::make(256, Byte::default())
   let len = err_get_error_string_ffi(buf)
@@ -36,16 +38,19 @@ pub fn err_get_error() -> String {
 }
 
 ///|
+/// 查看 OpenSSL 错误队列顶部的错误码（不弹出）。
 pub fn err_peek_code() -> UInt {
   err_peek_error_code_ffi()
 }
 
 ///|
+/// 清空 OpenSSL 错误队列。
 pub fn err_clear() -> Unit {
   err_clear_error_ffi()
 }
 
 ///|
+/// 获取并清空 OpenSSL 错误队列（组合操作）。
 pub fn err_get_and_clear() -> String {
   let s = err_get_error()
   err_clear()

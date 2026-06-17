@@ -92,6 +92,7 @@ pub fn dh_group14_shared(
 // ==================== BIGNUM helpers ====================
 
 ///|
+/// 从大端字节序列构造 BIGNUM。
 pub fn bn_from_bytes(bytes : Bytes) -> Bn raise CryptoError {
   ensure_openssl()
   let bn = bn_new_ffi()
@@ -103,6 +104,7 @@ pub fn bn_from_bytes(bytes : Bytes) -> Bn raise CryptoError {
 }
 
 ///|
+/// 将 BIGNUM 转为固定长度的大端字节序列。
 pub fn bn_to_bytes(bn : Bn, size : Int) -> Bytes raise CryptoError {
   let arr = FixedArray::make(size, b'\x00')
   let rc = bn_bn2binpad_ffi(bn, arr, size)
@@ -113,6 +115,7 @@ pub fn bn_to_bytes(bn : Bn, size : Int) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 将 BIGNUM 转为 SSH mpint 格式（含 uint32 长度前缀）。
 pub fn bn_to_mpint(bn : Bn) -> Bytes raise CryptoError {
   let buf = FixedArray::make(512, b'\x00')
   let buf_len = Ref(512)
@@ -125,11 +128,13 @@ pub fn bn_to_mpint(bn : Bn) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 释放 BIGNUM 资源。
 pub fn bn_free(bn : Bn) -> Unit {
   bn_free_ffi(bn)
 }
 
 ///|
+/// 生成 [0, range) 范围内的随机 BIGNUM。
 pub fn bn_rand_range(range : Bn) -> Bn raise CryptoError {
   ensure_openssl()
   let rnd = bn_new_ffi()
@@ -142,6 +147,7 @@ pub fn bn_rand_range(range : Bn) -> Bn raise CryptoError {
 }
 
 ///|
+/// 模幂运算：r = a^p mod m。
 pub fn bn_mod_exp(a : Bn, p : Bn, m : Bn) -> Bn raise CryptoError {
   let r = bn_new_ffi()
   let rc = bn_mod_exp_ffi(r, a, p, m)
@@ -153,11 +159,13 @@ pub fn bn_mod_exp(a : Bn, p : Bn, m : Bn) -> Bn raise CryptoError {
 }
 
 ///|
+/// 返回 BIGNUM 的字节长度。
 pub fn bn_num_bytes(bn : Bn) -> Int {
   bn_num_bytes_ffi(bn)
 }
 
 ///|
+/// 返回 BIGNUM 的比特长度。
 pub fn bn_num_bits(bn : Bn) -> Int {
   bn_num_bits_ffi(bn)
 }

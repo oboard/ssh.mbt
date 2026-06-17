@@ -10,11 +10,13 @@ pub struct KnownHost {
 }
 
 ///|
+/// 返回该条目的公钥算法名（如 `"ssh-rsa"`）。
 pub fn KnownHost::alg(self : KnownHost) -> String {
   self.key_alg
 }
 
 ///|
+/// 返回该条目的原始公钥字节（SSH wire 格式 blob）。
 pub fn KnownHost::key_bytes(self : KnownHost) -> Bytes {
   self.key
 }
@@ -35,6 +37,8 @@ pub fn KnownHost::matches(self : KnownHost, host : String, port : Int) -> Bool {
 }
 
 ///|
+/// 检查单个模式是否匹配目标主机名。
+/// 不支持 hashed 形式（`|1|...`）；支持 `*` 和 `?` 通配符。
 fn pattern_matches(pat : String, host : String) -> Bool {
   if pat.has_prefix("|1|") {
     return false
@@ -46,6 +50,7 @@ fn pattern_matches(pat : String, host : String) -> Bool {
 }
 
 ///|
+/// 通配符匹配：`*` 匹配任意序列，`?` 匹配单个字符。
 fn wildcard_match(pat : String, s : String) -> Bool {
   let mut pi = 0
   let mut si = 0
@@ -86,6 +91,8 @@ fn wildcard_match(pat : String, s : String) -> Bool {
 // ============== Parsing ==============
 
 ///|
+/// 解析 known_hosts 文件的一行，返回 [KnownHost] 条目。
+/// 跳过空行和注释行；格式为 `hostnames algorithm base64-key`。
 pub fn parse_line(line : String) -> KnownHost? raise SshError {
   let trimmed = trim_ascii(line)
   if trimmed.length() == 0 || trimmed.unsafe_get(0) == '#' {
@@ -114,6 +121,7 @@ pub fn parse_line(line : String) -> KnownHost? raise SshError {
 }
 
 ///|
+/// 解析整个 known_hosts 文件内容，返回所有有效条目。
 pub fn parse_file(content : String) -> Array[KnownHost] raise SshError {
   let out : Array[KnownHost] = []
   for line in content.split("\n") {
@@ -126,6 +134,7 @@ pub fn parse_file(content : String) -> Array[KnownHost] raise SshError {
 }
 
 ///|
+/// 将条目序列化为 known_hosts 格式字符串（`hostnames algorithm base64-key`）。
 pub fn KnownHost::format_entry(self : KnownHost) -> String {
   let pats = self.patterns.join(",")
   let key_b64 = encode_base64(self.key)
@@ -135,6 +144,7 @@ pub fn KnownHost::format_entry(self : KnownHost) -> String {
 // ============== Base64 ==============
 
 ///|
+/// 标准 Base64 解码（RFC 4648），忽略空白和 `=` 填充。
 pub fn decode_base64(s : String) -> Bytes raise SshError {
   let table = make_b64_decode_table()
   let mut buf = b""
@@ -161,6 +171,7 @@ pub fn decode_base64(s : String) -> Bytes raise SshError {
 }
 
 ///|
+/// 标准 Base64 编码（RFC 4648）。
 pub fn encode_base64(bytes : Bytes) -> String {
   let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
   let arr = bytes.to_fixedarray()
@@ -207,6 +218,7 @@ pub fn encode_base64(bytes : Bytes) -> String {
 }
 
 ///|
+/// 构建 Base64 字符到 6 位值的查找表。
 fn make_b64_decode_table() -> Map[Char, Int] {
   let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
   let m : Map[Char, Int] = Map([])
@@ -219,6 +231,7 @@ fn make_b64_decode_table() -> Map[Char, Int] {
 }
 
 ///|
+/// 去除字符串首尾的 ASCII 空白字符（空格、制表符、换行符、回车符）。
 fn trim_ascii(s : String) -> String {
   let arr = s.to_array()
   let mut start = 0

@@ -4,41 +4,54 @@
 
 // ============== Message types ==============
 
+///|
+/// SSH 消息号：CHANNEL_OPEN（90），请求打开通道。
 pub const MSG_CHANNEL_OPEN : Byte = b'\x5a' // 90
 
 ///|
+/// SSH 消息号：CHANNEL_OPEN_CONFIRMATION（91），通道打开成功。
 pub const MSG_CHANNEL_OPEN_CONFIRMATION : Byte = b'\x5b' // 91
 
 ///|
+/// SSH 消息号：CHANNEL_OPEN_FAILURE（92），通道打开失败。
 pub const MSG_CHANNEL_OPEN_FAILURE : Byte = b'\x5c' // 92
 
 ///|
+/// SSH 消息号：CHANNEL_WINDOW_ADJUST（93），调整窗口大小。
 pub const MSG_CHANNEL_WINDOW_ADJUST : Byte = b'\x5d' // 93
 
 ///|
+/// SSH 消息号：CHANNEL_DATA（94），通道数据。
 pub const MSG_CHANNEL_DATA : Byte = b'\x5e' // 94
 
 ///|
+/// SSH 消息号：CHANNEL_EXTENDED_DATA（95），扩展数据（如 stderr）。
 pub const MSG_CHANNEL_EXTENDED_DATA : Byte = b'\x5f' // 95
 
 ///|
+/// SSH 消息号：CHANNEL_EOF（96），通道 EOF。
 pub const MSG_CHANNEL_EOF : Byte = b'\x60' // 96
 
 ///|
+/// SSH 消息号：CHANNEL_CLOSE（97），关闭通道。
 pub const MSG_CHANNEL_CLOSE : Byte = b'\x61' // 97
 
 ///|
+/// SSH 消息号：CHANNEL_REQUEST（98），通道请求（exec/shell/subsystem 等）。
 pub const MSG_CHANNEL_REQUEST : Byte = b'\x62' // 98
 
 ///|
+/// SSH 消息号：CHANNEL_SUCCESS（99），请求成功。
 pub const MSG_CHANNEL_SUCCESS : Byte = b'\x63' // 99
 
 ///|
+/// SSH 消息号：CHANNEL_FAILURE（100），请求失败。
 pub const MSG_CHANNEL_FAILURE : Byte = b'\x64' // 100
 
 // ============== Channel ==============
 
 ///|
+/// SSH 通道（RFC 4254）。管理通道状态机、窗口和数据缓冲区。
 #warnings("-unused_field")
 pub struct Channel {
   priv id : Int
@@ -55,6 +68,7 @@ pub struct Channel {
 }
 
 ///|
+/// 通道状态机。
 #warnings("-unused_constructor")
 pub enum ChannelState {
   Closed
@@ -120,6 +134,7 @@ pub fn Channel::exit_status(self : Channel) -> Int? {
 // ============== Wire format builders ==============
 
 ///|
+/// 构建 SSH_MSG_CHANNEL_OPEN 消息体，请求打开一个 `"session"` 通道。
 pub fn build_channel_open(
   sender_channel : Int,
   initial_window : Int,
@@ -135,6 +150,7 @@ pub fn build_channel_open(
 }
 
 ///|
+/// 构建 exec 通道请求消息体。
 pub fn build_channel_request_exec(
   recipient_channel : Int,
   command : String,
@@ -149,6 +165,7 @@ pub fn build_channel_request_exec(
 }
 
 ///|
+/// 构建 shell 通道请求消息体。
 pub fn build_channel_request_shell(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_REQUEST)
@@ -159,6 +176,7 @@ pub fn build_channel_request_shell(recipient_channel : Int) -> Bytes {
 }
 
 ///|
+/// 构建 subsystem 通道请求消息体（如 `"sftp"`）。
 pub fn build_channel_request_subsystem(
   recipient_channel : Int,
   subsystem : String,
@@ -173,6 +191,7 @@ pub fn build_channel_request_subsystem(
 }
 
 ///|
+/// 构建 PTY 通道请求消息体（伪终端分配）。
 pub fn build_channel_request_pty(
   recipient_channel : Int,
   term : String,
@@ -197,6 +216,7 @@ pub fn build_channel_request_pty(
 }
 
 ///|
+/// 构建 CHANNEL_DATA 消息体。
 pub fn build_channel_data(recipient_channel : Int, data : Bytes) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_DATA)
@@ -206,6 +226,7 @@ pub fn build_channel_data(recipient_channel : Int, data : Bytes) -> Bytes {
 }
 
 ///|
+/// 构建 CHANNEL_EOF 消息体。
 pub fn build_channel_eof(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_EOF)
@@ -214,6 +235,7 @@ pub fn build_channel_eof(recipient_channel : Int) -> Bytes {
 }
 
 ///|
+/// 构建 CHANNEL_CLOSE 消息体。
 pub fn build_channel_close(recipient_channel : Int) -> Bytes {
   let w = Writer::new()
   w.write_byte(MSG_CHANNEL_CLOSE)
@@ -222,6 +244,7 @@ pub fn build_channel_close(recipient_channel : Int) -> Bytes {
 }
 
 ///|
+/// 构建 CHANNEL_WINDOW_ADJUST 消息体，通知对端增加窗口大小。
 pub fn build_channel_window_adjust(
   recipient_channel : Int,
   bytes_to_add : Int,
@@ -236,6 +259,7 @@ pub fn build_channel_window_adjust(
 // ============== Inbound handler ==============
 
 ///|
+/// 处理 CHANNEL_REQUEST 子类型：exit-status / exit-signal。
 fn handle_channel_request(
   ch : Channel,
   r : Reader,
@@ -262,6 +286,8 @@ fn handle_channel_request(
 }
 
 ///|
+/// 处理入站通道消息，更新状态并返回需要回复的消息列表。
+/// 自动处理窗口调整、数据缓冲、EOF、CLOSE 等。
 pub fn Channel::handle_inbound(
   self : Channel,
   payload : Bytes,
@@ -348,6 +374,7 @@ pub fn Channel::handle_inbound(
 // ============== Helpers ==============
 
 ///|
+/// 取出并清空 stdout 缓冲区内容（UTF-8 解码）。
 pub fn Channel::take_stdout(self : Channel) -> String {
   let s = bytes_to_utf8_string(Bytes::from_array(self.stdout_buf))
   self.stdout_buf.clear()
@@ -355,6 +382,7 @@ pub fn Channel::take_stdout(self : Channel) -> String {
 }
 
 ///|
+/// 取出并清空 stderr 缓冲区内容（UTF-8 解码）。
 pub fn Channel::take_stderr(self : Channel) -> String {
   let s = bytes_to_utf8_string(Bytes::from_array(self.stderr_buf))
   self.stderr_buf.clear()
@@ -362,6 +390,7 @@ pub fn Channel::take_stderr(self : Channel) -> String {
 }
 
 ///|
+/// 检查 stdout 缓冲区是否有数据。
 pub fn Channel::has_stdout(self : Channel) -> Bool {
   self.stdout_buf.length() > 0
 }

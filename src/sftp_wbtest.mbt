@@ -71,9 +71,10 @@ test "sftp/parse_attrs_full" {
   // 设置所有属性标志
   let w = Writer::new()
   w.write_uint32(
-    SSH_FILEXFER_ATTR_SIZE.lor(SSH_FILEXFER_ATTR_UIDGID).lor(
-      SSH_FILEXFER_ATTR_PERMISSIONS,
-    ).lor(SSH_FILEXFER_ATTR_ACMODTIME),
+    SSH_FILEXFER_ATTR_SIZE
+    .lor(SSH_FILEXFER_ATTR_UIDGID)
+    .lor(SSH_FILEXFER_ATTR_PERMISSIONS)
+    .lor(SSH_FILEXFER_ATTR_ACMODTIME),
   )
   w.write_uint32(2048) // size low
   w.write_uint32(0) // size high

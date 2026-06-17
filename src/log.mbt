@@ -8,6 +8,7 @@
 /// 通过 `enable_debug()` / `disable_debug()` 控制，或通过命令行 `--debug` 参数开启。
 let debug_enabled : Ref[Bool] = Ref(false)
 
+///|
 extern "C" fn openssl_set_debug(val : Int) -> Unit = "moonbitlang_ssh_set_debug"
 
 ///|
@@ -41,6 +42,7 @@ pub fn debug(msg : String) -> Unit {
 }
 
 ///|
+/// 将 4 位半字节（0-15）转为十六进制字符。
 fn hex_nibble_to_string(n : Int) -> String {
   if n < 10 {
     (n + 48).unsafe_to_char().to_string()

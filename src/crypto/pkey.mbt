@@ -124,7 +124,8 @@ extern "C" fn pkey_new_rsa_ffi(
 ) -> Int = "moonbitlang_ssh_pkey_new_rsa"
 
 ///|
-/// 公钥包装。
+/// 公钥/私钥对象包装（基于 OpenSSL EVP_PKEY）。
+/// 支持 RSA、DSA、ECDSA、Ed25519 等算法。
 pub struct PKey {
   ptr : Pkey
 }
@@ -149,6 +150,7 @@ pub fn PKey::load_private_key(path : String) -> PKey raise CryptoError {
 }
 
 ///|
+/// 从 PEM 文件加载公钥。
 pub fn PKey::load_public_key(path : String) -> PKey raise CryptoError {
   ensure_openssl()
   let out : Ref[Pkey] = Ref(pkey_new_ffi())
@@ -165,6 +167,8 @@ pub fn PKey::load_public_key(path : String) -> PKey raise CryptoError {
 }
 
 ///|
+/// 从 RSA 公钥组件（模数 n、指数 e）构建仅公钥 PKey。
+/// 用于 host key 验证。
 pub fn PKey::from_rsa_components(
   n : Bytes,
   e : Bytes,
@@ -181,11 +185,13 @@ pub fn PKey::from_rsa_components(
 }
 
 ///|
+/// 释放密钥资源。
 pub fn PKey::close(self : PKey) -> Unit {
   pkey_free_ffi(self.ptr)
 }
 
 ///|
+/// 返回密钥的字节大小。
 pub fn PKey::size(self : PKey) -> Int {
   pkey_size_ffi(self.ptr)
 }

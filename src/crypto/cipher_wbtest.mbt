@@ -39,16 +39,16 @@ test "cipher_algorithm/eq" {
 ///|
 test "cipher/encrypt_decrypt_roundtrip" {
   let key = Bytes::from_array([
-    b'\x2b', b'\x7e', b'\x15', b'\x16', b'\x28', b'\xae', b'\xd2', b'\xa6',
-    b'\xab', b'\xf7', b'\x15', b'\x88', b'\x09', b'\xcf', b'\x4f', b'\x3c',
+    b'\x2b', b'\x7e', b'\x15', b'\x16', b'\x28', b'\xae', b'\xd2', b'\xa6', b'\xab',
+    b'\xf7', b'\x15', b'\x88', b'\x09', b'\xcf', b'\x4f', b'\x3c',
   ])
   let iv = Bytes::from_array([
-    b'\xf0', b'\xf1', b'\xf2', b'\xf3', b'\xf4', b'\xf5', b'\xf6', b'\xf7',
-    b'\xf8', b'\xf9', b'\xfa', b'\xfb', b'\xfc', b'\xfd', b'\xfe', b'\xff',
+    b'\xf0', b'\xf1', b'\xf2', b'\xf3', b'\xf4', b'\xf5', b'\xf6', b'\xf7', b'\xf8',
+    b'\xf9', b'\xfa', b'\xfb', b'\xfc', b'\xfd', b'\xfe', b'\xff',
   ])
   let plaintext = Bytes::from_array([
-    b'\x6b', b'\xc1', b'\xbe', b'\xe2', b'\x2e', b'\x40', b'\x9f', b'\x96',
-    b'\xe9', b'\x3d', b'\x7e', b'\x11', b'\x73', b'\x93', b'\x17', b'\x2a',
+    b'\x6b', b'\xc1', b'\xbe', b'\xe2', b'\x2e', b'\x40', b'\x9f', b'\x96', b'\xe9',
+    b'\x3d', b'\x7e', b'\x11', b'\x73', b'\x93', b'\x17', b'\x2a',
   ])
 
   // Encrypt

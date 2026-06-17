@@ -1,9 +1,9 @@
 ///|
-/// Simplified TCP socket implementation using Winsock2 FFI
-/// This replaces moonbitlang/async/socket to avoid MSVC dependency
+/// 简化的 TCP socket 实现（基于 Winsock2 FFI）。
+/// 替代 moonbitlang/async/socket 以避免 MSVC 依赖。
 
 ///|
-/// A TCP connection
+/// TCP 连接句柄。
 pub struct Tcp {
   handle : Int // Socket handle (SOCKET on Windows)
   host : String
@@ -11,30 +11,30 @@ pub struct Tcp {
 }
 
 ///|
-/// Initialize Winsock (Windows only, must be called before using sockets)
+/// 初始化 Winsock（仅 Windows，使用 socket 前必须调用）。
 extern "C" fn winsock_init() -> Int = "socket_init"
 
 ///|
-/// Create a TCP socket
+/// 创建 TCP socket。
 extern "C" fn socket_create() -> Int = "socket_create"
 
 ///|
-/// Connect to a host (by IP address string and port)
+/// 连接到指定主机（IP 地址字符串 + 端口）。
 #borrow(host)
 extern "C" fn socket_connect(handle : Int, host : String, port : Int) -> Int = "socket_connect"
 
 ///|
-/// Send data through socket
+/// 通过 socket 发送字符串数据。
 #borrow(data)
 extern "C" fn socket_send(handle : Int, data : String) -> Int = "socket_send"
 
 ///|
-/// Send raw bytes through socket
+/// 通过 socket 发送原始字节数据。
 #borrow(data)
 extern "C" fn socket_send_bytes(handle : Int, data : Bytes, len : Int) -> Int = "socket_send_bytes"
 
 ///|
-/// Receive data from socket into buffer starting at offset
+/// 从 socket 接收数据到缓冲区指定偏移位置。
 #borrow(buffer)
 extern "C" fn socket_recv(
   handle : Int,
@@ -44,28 +44,26 @@ extern "C" fn socket_recv(
 ) -> Int = "socket_recv"
 
 ///|
-/// Close a socket
+/// 关闭 socket。
 extern "C" fn socket_close(handle : Int) -> Unit = "socket_close"
 
 ///|
-/// Set TCP_NODELAY on the given socket (disable Nagle's algorithm).
-/// Critical for SSH-style interactive protocols where small packets
-/// must be sent without waiting for ACK.
+/// 设置 TCP_NODELAY（禁用 Nagle 算法）。
+/// 对 SSH 等交互式协议至关重要，确保小包立即发送。
 extern "C" fn socket_set_nodelay(handle : Int) -> Int = "socket_set_nodelay"
 
 ///|
-/// Set the global debug flag for C-level debug output (socket/openssl).
-/// This controls fprintf(stderr, ...) output in the C FFI layer.
+/// 设置 C 层调试输出的全局开关（控制 socket/openssl 的 stderr 输出）。
 extern "C" fn moonbit_set_moonssh_debug(val : Int) -> Unit = "moonbit_set_moonssh_debug"
 
 ///|
-/// Enable or disable C-level debug output.
+/// 启用或禁用 C 层调试输出。
 pub fn set_debug(enabled : Bool) -> Unit {
   moonbit_set_moonssh_debug(if enabled { 1 } else { 0 })
 }
 
 ///|
-/// Connect to a remote host
+/// 连接到远程主机。自动初始化 Winsock、创建 socket、设置 TCP_NODELAY。
 pub fn Tcp::connect_to_host(host : String, port~ : Int) -> Tcp raise {
   // Initialize Winsock on Windows
   let init_result = winsock_init()
@@ -99,7 +97,7 @@ pub fn Tcp::connect_to_host(host : String, port~ : Int) -> Tcp raise {
 }
 
 ///|
-/// Write data to the connection
+/// 向连接写入字符串数据。
 pub fn Tcp::write(self : Tcp, data : String) -> Unit raise {
   let result = socket_send(self.handle, data)
   if result < 0 {
@@ -108,7 +106,7 @@ pub fn Tcp::write(self : Tcp, data : String) -> Unit raise {
 }
 
 ///|
-/// Write raw bytes to the connection.
+/// 向连接写入原始字节数据。
 pub fn Tcp::write_bytes(self : Tcp, data : Bytes) -> Unit raise {
   let result = socket_send_bytes(self.handle, data, data.length())
   if result < 0 {
@@ -117,7 +115,7 @@ pub fn Tcp::write_bytes(self : Tcp, data : Bytes) -> Unit raise {
 }
 
 ///|
-/// Read a line from the connection (reads until \n or \r\n)
+/// 从连接读取一行（直到 `\n` 或 `\r\n`）。
 pub fn Tcp::read_line(self : Tcp) -> String raise {
   let buffer = Bytes::new(4096)
   let mut total_read = 0
@@ -151,7 +149,7 @@ pub fn Tcp::read_line(self : Tcp) -> String raise {
 }
 
 ///|
-/// Read exact number of bytes
+/// 精确读取指定字节数（阻塞直到读满）。
 pub fn Tcp::read_exact(self : Tcp, size : Int) -> Bytes raise {
   let buffer = Bytes::new(size)
   let mut total_read = 0
@@ -175,9 +173,8 @@ pub fn Tcp::read_exact(self : Tcp, size : Int) -> Bytes raise {
 }
 
 ///|
-/// Read bytes until a newline (\n) is encountered.
-/// Returns all content bytes up to (but not including) the newline.
-/// Trailing \r is stripped (for \r\n line endings).
+/// 读取字节直到遇到换行符 `\n`。
+/// 返回换行前的所有字节，末尾 `\r` 会被去除（兼容 `\r\n`）。
 pub fn Tcp::read_until_newline(self : Tcp) -> Bytes raise {
   let buffer = Bytes::new(4096)
   let mut total_read = 0
@@ -212,13 +209,13 @@ pub fn Tcp::read_until_newline(self : Tcp) -> Bytes raise {
 }
 
 ///|
-/// Close the connection
+/// 关闭连接。
 pub fn Tcp::close(self : Tcp) -> Unit {
   socket_close(self.handle)
 }
 
 ///|
-/// IO error type
+/// I/O 错误类型。
 pub suberror IoError {
   IoError(String)
 } derive(Eq, Debug)

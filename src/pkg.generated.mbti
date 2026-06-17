@@ -1,42 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "PaiGack/ssh_client/src"
 
-import {
-  "moonbitlang/core/debug",
-}
-
 // Values
-pub fn decode_base64(String) -> Bytes raise SshError
-
-pub fn encode_base64(Bytes) -> String
-
-pub fn parse_file(String) -> Array[KnownHost] raise SshError
-
-pub fn parse_line(String) -> KnownHost? raise SshError
 
 // Errors
-pub suberror SshError {
-  IoError(String)
-  ConnectionClosed
-  ProtocolError(String)
-  MacMismatch
-  NotEncrypted
-  HostKeyMismatch(String)
-  AuthFailed(String)
-  RequestDenied(String)
-  ParseError(String)
-} derive(Eq, @debug.Debug)
 
 // Types and methods
-pub struct KnownHost {
-  patterns : Array[String]
-  key_alg : String
-  key : Bytes
-}
-pub fn KnownHost::alg(Self) -> String
-pub fn KnownHost::format_entry(Self) -> String
-pub fn KnownHost::key_bytes(Self) -> Bytes
-pub fn KnownHost::matches(Self, String, Int) -> Bool
 
 // Type aliases
 

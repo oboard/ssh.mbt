@@ -2,22 +2,26 @@
 /// 哈希算法包装（SSH 所需：SHA-1, SHA-256）。
 
 ///|
+/// 摘要算法枚举。
 pub enum Algorithm {
   Sha1 = 1
   Sha256 = 2
 } derive(Eq, Debug)
 
 ///|
+/// SHA-1 算法（输出 20 字节）。
 pub fn Algorithm::sha1() -> Algorithm {
   Sha1
 }
 
 ///|
+/// SHA-256 算法（输出 32 字节）。
 pub fn Algorithm::sha256() -> Algorithm {
   Sha256
 }
 
 ///|
+/// 返回算法的输出长度（字节数）。
 pub fn Algorithm::output_len(self : Algorithm) -> Int {
   match self {
     Sha1 => 20
@@ -69,12 +73,14 @@ extern "C" fn digest_oneshot_ffi(
 ) -> Int = "moonbitlang_ssh_digest"
 
 ///|
+/// 增量哈希计算上下文（基于 OpenSSL EVP_MD_CTX）。
 pub struct Hasher {
   ctx : MdCtx
   alg : Algorithm
 }
 
 ///|
+/// 创建指定算法的增量哈希上下文。
 pub fn Hasher::new(alg : Algorithm) -> Hasher raise CryptoError {
   ensure_openssl()
   let ctx = md_ctx_new_ffi()
@@ -86,6 +92,7 @@ pub fn Hasher::new(alg : Algorithm) -> Hasher raise CryptoError {
 }
 
 ///|
+/// 向哈希上下文追加数据。
 pub fn Hasher::update(self : Hasher, data : Bytes) -> Unit raise CryptoError {
   if md_update_ffi(self.ctx, data, data.length()) != 1 {
     raise CryptoError::OperationFailed("EVP_DigestUpdate", err_get_and_clear())
@@ -101,6 +108,7 @@ pub fn Hasher::update_string(
 }
 
 ///|
+/// 完成哈希计算，返回摘要值并释放上下文。
 pub fn Hasher::finalize(self : Hasher) -> Bytes raise CryptoError {
   let out_len_ref = Ref(0)
   let out = FixedArray::make(self.alg.output_len(), b'\x00')
@@ -116,6 +124,7 @@ pub fn Hasher::finalize(self : Hasher) -> Bytes raise CryptoError {
 }
 
 ///|
+/// 一次性计算摘要（等价于 new + update + finalize）。
 pub fn digest(alg : Algorithm, data : Bytes) -> Bytes raise CryptoError {
   ensure_openssl()
   let out_len_ref = Ref(0)

@@ -3,6 +3,7 @@
 /// 组装 KEX / auth / channel 模块，提供完整 SSH 客户端。
 
 ///|
+/// SSH 连接参数。
 pub struct ConnectOptions {
   host : String
   port : Int
@@ -13,6 +14,7 @@ pub struct ConnectOptions {
 }
 
 ///|
+/// 创建默认连接参数。host key 验证默认接受所有主机。
 pub fn ConnectOptions::new(
   host : String,
   port : Int,
@@ -29,6 +31,7 @@ pub fn ConnectOptions::new(
 }
 
 ///|
+/// 设置 host key 验证回调。回调接收 `(algorithm_name, host_key_blob)`，返回是否接受。
 pub fn ConnectOptions::with_host_key_verifier(
   self : ConnectOptions,
   f : (String, Bytes) -> Bool,
@@ -37,6 +40,7 @@ pub fn ConnectOptions::with_host_key_verifier(
 }
 
 ///|
+/// SSH 客户端。组装 KEX / auth / channel / 加密层，提供完整 SSH 连接能力。
 pub struct Client {
   priv conn : ClientConn
   priv kex : KexContext
@@ -59,6 +63,7 @@ priv enum ClientConn {
 }
 
 ///|
+/// 返回默认客户端 banner：`"SSH-2.0-MoonSSH_0.1.0"`。
 pub fn Client::default_banner() -> String {
   "SSH-2.0-MoonSSH_0.1.0"
 }
@@ -364,6 +369,7 @@ pub fn Client::auth_auto(
 // ============== Channel operations ==============
 
 ///|
+/// 创建一个新的 session 通道（尚未打开，需配合 [Client::exec] 或 [Client::shell]）。
 pub fn Client::open_session(self : Client) -> Channel {
   let id = self.next_channel_id
   self.next_channel_id = self.next_channel_id + 1
@@ -371,6 +377,7 @@ pub fn Client::open_session(self : Client) -> Channel {
 }
 
 ///|
+/// 在远程主机上执行命令，阻塞直到命令结束。返回 `(stdout, stderr)`。
 pub fn Client::exec(
   self : Client,
   channel : Channel,
@@ -427,6 +434,7 @@ pub fn Client::exec(
 }
 
 ///|
+/// 请求远程 shell。发送 shell 请求后立即返回（非阻塞），后续通过 channel 交互。
 pub fn Client::shell(self : Client, channel : Channel) -> Unit raise SshError {
   // 1. 打开通道
   let open_msg = build_channel_open(channel.id(), 1024 * 1024, 32 * 1024)
@@ -451,6 +459,7 @@ pub fn Client::shell(self : Client, channel : Channel) -> Unit raise SshError {
 }
 
 ///|
+/// 关闭底层 TCP 连接。
 pub fn Client::close(self : Client) -> Unit {
   match self.conn {
     Connected(conn) => conn.close()
@@ -460,7 +469,7 @@ pub fn Client::close(self : Client) -> Unit {
 // ============== Internal packet I/O ==============
 
 ///|
-/// Read an encrypted packet, skipping SSH_MSG_IGNORE(2), DEBUG(4), EXT_INFO(7).
+/// 读取加密包，自动跳过 IGNORE(2)、DEBUG(4)、EXT_INFO(7) 消息。
 fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
   while true {
     let payload = self.read_encrypted_packet()
@@ -478,6 +487,7 @@ fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
 }
 
 ///|
+/// 读取一个 SSH 包（根据加密状态自动选择明文或密文读取）。
 fn Client::read_packet(self : Client) -> Bytes raise SshError {
   if self.encrypted {
     self.read_encrypted_packet()
@@ -487,6 +497,7 @@ fn Client::read_packet(self : Client) -> Bytes raise SshError {
 }
 
 ///|
+/// 写出一个 SSH 包（根据加密状态自动选择明文或密文写出）。
 fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
   if self.encrypted {
     self.write_encrypted_packet(payload)
@@ -496,6 +507,7 @@ fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
 }
 
 ///|
+/// 读取明文 SSH 包（KEX 阶段使用）。
 fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) => {
@@ -528,6 +540,7 @@ fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
 }
 
 ///|
+/// 写出明文 SSH 包（KEX 阶段使用）。
 fn Client::write_plain_packet(
   self : Client,
   payload : Bytes,
@@ -550,6 +563,7 @@ fn Client::write_plain_packet(
 }
 
 ///|
+/// KEX 完成后安装加密上下文（cipher + MAC），切换到加密模式。
 fn Client::install_encryption(
   self : Client,
   keys : DerivedKeys,
@@ -596,6 +610,7 @@ fn Client::install_encryption(
 }
 
 ///|
+/// 将 SSH 算法名映射到 [crypto.CipherAlgorithm]。
 fn parse_cipher_algorithm(
   name : String,
 ) -> @crypto.CipherAlgorithm raise SshError {
@@ -606,6 +621,7 @@ fn parse_cipher_algorithm(
 }
 
 ///|
+/// 将 SSH 算法名映射到 [crypto.MacAlgorithm]。
 fn parse_mac_algorithm(name : String) -> @crypto.MacAlgorithm raise SshError {
   match name {
     "hmac-sha1" => @crypto.MacAlgorithm::hmac_sha1()
@@ -615,6 +631,8 @@ fn parse_mac_algorithm(name : String) -> @crypto.MacAlgorithm raise SshError {
 }
 
 ///|
+/// 读取加密 SSH 包：解密 + MAC 验证 + 去 padding。
+/// 使用 AES-CTR 流加密模式，整个包（含长度字段）都被加密。
 fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) => {
@@ -735,6 +753,7 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
 }
 
 ///|
+/// 写出加密 SSH 包：padding + 加密 + MAC。
 fn Client::write_encrypted_packet(
   self : Client,
   payload : Bytes,
@@ -809,7 +828,7 @@ fn Client::write_encrypted_packet(
 }
 
 ///|
-/// Compute MAC with s2c key for verification, using seq_recv.
+/// 使用 s2c MAC 密钥计算接收方向的消息认证码（用于验证）。
 fn compute_mac_s2c(client : Client, data : Bytes) -> Bytes raise SshError {
   let mac_ctx = match client.mac_s2c {
     Some(m) => m
@@ -822,6 +841,7 @@ fn compute_mac_s2c(client : Client, data : Bytes) -> Bytes raise SshError {
 }
 
 ///|
+/// 使用 c2s MAC 密钥计算发送方向的消息认证码。
 fn compute_mac(client : Client, data : Bytes) -> Bytes raise SshError {
   let mac_ctx = match client.mac_c2s {
     Some(m) => m
@@ -844,6 +864,7 @@ fn compute_mac(client : Client, data : Bytes) -> Bytes raise SshError {
 // ============== Helpers ==============
 
 ///|
+/// 将原始签名打包为 SSH signature blob（`string alg || string sig`）。
 fn build_signature_blob(alg : String, sig : Bytes) -> Bytes {
   let w = Writer::new()
   w.write_string_from_str(alg)

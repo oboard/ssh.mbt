@@ -278,9 +278,7 @@ test "handle_inbound/data_when_not_open_buffers_but_uses_zero_peer" {
   ignore(ch.take_stdout())
   // 实现目前总是回送 WINDOW_ADJUST；此处只断言存在响应
   inspect(responses.length(), content="1")
-  let (msg, body) = channel_msg_body(responses[0]) catch {
-    _ => (b'\x00', b"")
-  }
+  let (msg, body) = channel_msg_body(responses[0]) catch { _ => (b'\x00', b"") }
   inspect(msg.to_int(), content="93")
   let r = Reader::new(body)
   // peer_id 此时为 0
@@ -337,9 +335,7 @@ test "handle_inbound/close_moves_to_done_and_returns_close" {
   }
   // 应当回送一条 CHANNEL_CLOSE
   inspect(responses.length(), content="1")
-  let (msg, body) = channel_msg_body(responses[0]) catch {
-    _ => (b'\x00', b"")
-  }
+  let (msg, body) = channel_msg_body(responses[0]) catch { _ => (b'\x00', b"") }
   inspect(msg.to_int(), content="97") // CHANNEL_CLOSE
   let r = Reader::new(body)
   inspect(r.read_uint32(), content="7")

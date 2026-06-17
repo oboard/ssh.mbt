@@ -11,7 +11,7 @@
 
 name = "PaiGack/ssh_client"
 
-version = "0.2.0"
+version = "0.2.1"
 
 readme = "README.md"
 
@@ -22,3 +22,13 @@ license = "Apache-2.0"
 keywords = [ "SSH", "SSH Client", "SSH 客户端", "SFTP" ]
 
 description = "使用 MoonBit 实现的 SSH 客户端库"
+
+options(
+  "include": [
+    "README.md", 
+    "README.mbt.md",
+    "src",
+    "cmd",
+    "scripts"
+  ],
+)

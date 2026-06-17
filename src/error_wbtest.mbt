@@ -50,7 +50,8 @@ test "ssh_error/match_auth_failed_carries_reason" {
   // AuthFailed 携带的字符串可被取出并展示
   let e : SshError = AuthFailed("methods: [publickey,password]")
   match e {
-    AuthFailed(reason) => inspect(reason, content="methods: [publickey,password]")
+    AuthFailed(reason) =>
+      inspect(reason, content="methods: [publickey,password]")
     _ => fail("expected AuthFailed")
   }
 }

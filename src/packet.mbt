@@ -214,6 +214,7 @@ pub fn Writer::to_bytes(self : Writer) -> Bytes {
 // ============== Packet I/O ==============
 
 ///|
+/// SSH 包最大长度（256 KiB）。
 pub const MAX_PACKET : Int = 256 * 1024
 
 ///|
@@ -305,6 +306,7 @@ pub fn write_packet(
 }
 
 ///|
+/// 生成指定长度的随机字节（用于包 padding）。
 fn packet_random_bytes(n : Int) -> Bytes {
   @crypto.rand_bytes(n) catch {
     _ => Bytes::make(n, b'\x00')
