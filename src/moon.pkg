@@ -23,6 +23,7 @@ options(
     "ssh_client_wbtest.mbt": [ "native" ],
     "sftp.mbt": [ "native" ],
     "sftp_wbtest.mbt": [ "native" ],
+    "known_hosts.mbt": [ "native" ],
     "known_hosts_wbtest.mbt": [ "native" ],
   },
 )
