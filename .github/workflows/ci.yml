@@ -72,3 +72,14 @@ jobs:
             echo "==> Running $f"
             bash "$f"
           done
+      
+      - name: Run cmd/sftp sequentially, run moon connect to ssh server
+        run: |
+          set -e
+
+          echo "Running cmd/sftp run.sh..."
+          export workspace=$(pwd)
+
+          cd cmd/sftp
+          chmod +x run.sh
+          bash run.sh
