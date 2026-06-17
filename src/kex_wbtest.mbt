@@ -223,17 +223,20 @@ test "ecdh_reply/wrong_msg_raises" {
 
 // ============== DH payloads ==============
 
-// ///|
-// test "dh_init_payload/frame" {
-//   // 30 + mpint(e)
-//   let e = @bigint.BigInt::from_int(0xdeadbeef)
-//   let payload = build_dh_init_payload(e)
-//   let r = Reader::new(payload)
-//   inspect(r.read_byte().to_int(), content="30")
-//   // 后面是 mpint，长度取决于其大端字节数
-//   let m = r.read_mpint()
-//   inspect(m.to_int(), content="-559038737")
-// }
+///|
+test "dh_init_payload/frame" {
+  // 这个 0xdeadbeef 数存在问题，会导致 BEGIN MError: failed to run test for target Native
+  // 30 + mpint(e)
+  // let e = @bigint.BigInt::from_int(0xdeadbeef)
+  // 
+  let e = @bigint.BigInt::from_int(1234567890)
+  let payload = build_dh_init_payload(e)
+  let r = Reader::new(payload)
+  inspect(r.read_byte().to_int(), content="30")
+  // 后面是 mpint，长度取决于其大端字节数
+  let m = r.read_mpint()
+  inspect(m.to_int(), content="1234567890")
+}
 
 ///|
 test "dh_reply/roundtrip" {
