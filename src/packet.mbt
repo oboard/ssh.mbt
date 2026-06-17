@@ -116,26 +116,31 @@ pub fn Reader::rest(self : Reader) -> Bytes {
 // ============== Writer ==============
 
 ///|
+/// 字节写入器，累积写入并可一次性转为 `Bytes`。
 pub struct Writer {
   priv buf : Array[Byte]
 }
 
 ///|
+/// 创建空 Writer。
 pub fn Writer::new() -> Writer {
   { buf: [] }
 }
 
 ///|
+/// 已写入的字节数。
 pub fn Writer::length(self : Writer) -> Int {
   self.buf.length()
 }
 
 ///|
+/// 追加单字节。
 pub fn Writer::write_byte(self : Writer, b : Byte) -> Unit {
   self.buf.push(b)
 }
 
 ///|
+/// 追加整段 `Bytes`。
 pub fn Writer::write_bytes(self : Writer, b : Bytes) -> Unit {
   for byte in b {
     self.buf.push(byte)
@@ -143,6 +148,7 @@ pub fn Writer::write_bytes(self : Writer, b : Bytes) -> Unit {
 }
 
 ///|
+/// 以大端序追加一个 32 位无符号整数（SSH wire 上的标准整数编码）。
 pub fn Writer::write_uint32(self : Writer, n : Int) -> Unit {
   let n_u = n.reinterpret_as_uint()
   self.buf.push(((n_u >> 24) & 0xffU).reinterpret_as_int().to_byte())
@@ -152,17 +158,22 @@ pub fn Writer::write_uint32(self : Writer, n : Int) -> Unit {
 }
 
 ///|
+/// 追加 SSH "string" 字段：4 字节长度前缀 + 原始字节。
 pub fn Writer::write_string(self : Writer, s : Bytes) -> Unit {
   self.write_uint32(s.length())
   self.write_bytes(s)
 }
 
 ///|
+/// 追加 SSH "string" 字段，内容为字符串的 UTF-8 编码。
 pub fn Writer::write_string_from_str(self : Writer, s : String) -> Unit {
   self.write_string(@utf8.encode(s))
 }
 
 ///|
+/// 追加 SSH "name-list" 字段：以 `,` 串联的字符串（RFC 4251 §5）。
+///
+/// 空数组写出长度 0 的 string。
 pub fn Writer::write_name_list(self : Writer, names : Array[String]) -> Unit {
   let mut s = ""
   for i, name in names {
@@ -175,6 +186,9 @@ pub fn Writer::write_name_list(self : Writer, names : Array[String]) -> Unit {
 }
 
 ///|
+/// 追加 SSH "mpint" 多精度整数（RFC 4251 §5）。
+///
+/// 当最高位为 1（会被解释为负数）时，自动前导补 0x00。
 pub fn Writer::write_mpint(self : Writer, n : @bigint.BigInt) -> Unit {
   let bytes = n.to_octets()
   if bytes.length() == 0 {
@@ -192,6 +206,7 @@ pub fn Writer::write_mpint(self : Writer, n : @bigint.BigInt) -> Unit {
 }
 
 ///|
+/// 取出已写入的全部字节，Writer 仍可继续追加。
 pub fn Writer::to_bytes(self : Writer) -> Bytes {
   Bytes::from_array(self.buf)
 }
@@ -299,16 +314,19 @@ fn packet_random_bytes(n : Int) -> Bytes {
 // ============== Low-level helpers ==============
 
 ///|
+/// 将原始字节编码为 SSH "string" 字段：`uint32(length) || bytes`。
 pub fn encode_string(s : Bytes) -> Bytes {
   encode_uint32(s.length()) + s
 }
 
 ///|
+/// 将字符串编码为 SSH "string" 字段（先 UTF-8 编码）。
 pub fn encode_string_from_str(s : String) -> Bytes {
   encode_string(@utf8.encode(s))
 }
 
 ///|
+/// 大端序 32 位无符号整数编码为 4 字节。
 pub fn encode_uint32(n : Int) -> Bytes {
   let arr = FixedArray::make(4, b'\x00')
   let n_u = n.reinterpret_as_uint()
@@ -320,6 +338,9 @@ pub fn encode_uint32(n : Int) -> Bytes {
 }
 
 ///|
+/// 从 4 字节大端序缓冲区解码 32 位无符号整数。
+///
+/// 调用方须保证缓冲区长度 ≥ 4；不做越界检查以追求性能。
 pub fn decode_uint32(buf : Bytes) -> Int {
   let v = buf.to_fixedarray()
   let b0 = v.unsafe_get(0).to_uint()
@@ -330,6 +351,7 @@ pub fn decode_uint32(buf : Bytes) -> Int {
 }
 
 ///|
+/// 将多精度整数编码为 SSH "mpint" 字段（RFC 4251 §5）。
 pub fn encode_mpint(n : @bigint.BigInt) -> Bytes {
   let w = Writer::new()
   w.write_mpint(n)
@@ -337,6 +359,13 @@ pub fn encode_mpint(n : @bigint.BigInt) -> Bytes {
 }
 
 ///|
+/// 从原始大端字节序列构造 SSH "mpint"。
+///
+/// - 去除前导零（最小表示）
+/// - 最高位为 1 时前导补 0x00 以保证被解释为正数
+/// - 全零或空序列编码为单字节 `\x00`
+///
+/// 用于在公钥 blob 已是已规范化的字节序列场景下避免 BigInt 往返。
 pub fn encode_mpint_of_bytes(bytes : Bytes) -> Bytes {
   if bytes.length() == 0 {
     return encode_string(b"\x00")

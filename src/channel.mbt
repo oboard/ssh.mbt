@@ -67,6 +67,10 @@ pub enum ChannelState {
 } derive(Eq, Debug)
 
 ///|
+/// 创建本地通道。
+///
+/// 初始状态为 [ChannelState::Closed]；`local_window` 与 `local_max_packet` 取常用默认值
+/// （1 MiB / 32 KiB），由 `SSH_MSG_CHANNEL_OPEN_CONFIRMATION` 携带的对端参数覆写。
 pub fn Channel::new(local_id : Int) -> Channel {
   {
     id: local_id,
@@ -84,26 +88,31 @@ pub fn Channel::new(local_id : Int) -> Channel {
 }
 
 ///|
+/// 本地分配的通道号。
 pub fn Channel::id(self : Channel) -> Int {
   self.id
 }
 
 ///|
+/// 服务端分配的通道号；在收到 `SSH_MSG_CHANNEL_OPEN_CONFIRMATION` 之后才有值。
 pub fn Channel::peer_id(self : Channel) -> Int {
   self.peer_id
 }
 
 ///|
+/// 当前状态机。
 pub fn Channel::state(self : Channel) -> ChannelState {
   self.state
 }
 
 ///|
+/// 是否处于打开状态（[ChannelState::Open]）。
 pub fn Channel::is_open(self : Channel) -> Bool {
   self.state == Open
 }
 
 ///|
+/// 远端 exec 退出码；若 `exec` 尚未结束或未触发 `exit-status` 请求则为 `None`。
 pub fn Channel::exit_status(self : Channel) -> Int? {
   self.exit_status
 }

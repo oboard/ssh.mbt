@@ -8,13 +8,21 @@ import {
 options(
   targets: {
     "log.mbt": [ "native" ],
+    "log_wbtest.mbt": [ "native" ],
     "packet.mbt": [ "native" ],
+    "packet_wbtest.mbt": [ "native" ],
     "kex.mbt": [ "native" ],
     "kex_wbtest.mbt": [ "native" ],
     "auth.mbt": [ "native" ],
     "auth_wbtest.mbt": [ "native" ],
     "channel.mbt": [ "native" ],
+    "channel_wbtest.mbt": [ "native" ],
+    "error.mbt": [ "native" ],
+    "error_wbtest.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],
+    "ssh_client_wbtest.mbt": [ "native" ],
     "sftp.mbt": [ "native" ],
+    "sftp_wbtest.mbt": [ "native" ],
+    "known_hosts_wbtest.mbt": [ "native" ],
   },
 )
