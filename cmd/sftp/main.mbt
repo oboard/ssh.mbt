@@ -55,9 +55,7 @@ fn parse_args(
     let arg = argv[i]
     if arg == "--port" && i + 1 < argv.length() {
       i = i + 1
-      port = @utils.parse_int(argv[i]) catch {
-        _ => abort("Invalid port: \{argv[i]}")
-      }
+      port = @utils.parse_int(argv[i])
     } else if arg == "--password" && i + 1 < argv.length() {
       i = i + 1
       password = argv[i]

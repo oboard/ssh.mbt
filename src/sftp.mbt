@@ -20,12 +20,6 @@ const SSH_FXP_READ : Byte = b'\x05'
 const SSH_FXP_WRITE : Byte = b'\x06'
 
 ///|
-const SSH_FXP_LSTAT : Byte = b'\x07'
-
-///|
-const SSH_FXP_FSTAT : Byte = b'\x08'
-
-///|
 const SSH_FXP_SETSTAT : Byte = b'\x09'
 
 ///|
@@ -80,27 +74,6 @@ const SSH_FX_OK : Int = 0
 ///|
 const SSH_FX_EOF : Int = 1
 
-///|
-const SSH_FX_NO_SUCH_FILE : Int = 2
-
-///|
-const SSH_FX_PERMISSION_DENIED : Int = 3
-
-///|
-const SSH_FX_FAILURE : Int = 4
-
-///|
-const SSH_FX_BAD_MESSAGE : Int = 5
-
-///|
-const SSH_FX_NO_CONNECTION : Int = 6
-
-///|
-const SSH_FX_CONNECTION_LOST : Int = 7
-
-///|
-const SSH_FX_OP_UNSUPPORTED : Int = 8
-
 // 文件打开标志
 
 ///|
@@ -135,9 +108,6 @@ const SSH_FILEXFER_ATTR_PERMISSIONS : Int = 0x00000004
 ///|
 const SSH_FILEXFER_ATTR_ACMODTIME : Int = 0x00000008
 
-///|
-const SSH_FILEXFER_ATTR_EXTENDED : Int = 0x80000000
-
 // SFTP 协议版本
 
 ///|
@@ -147,7 +117,7 @@ const SFTP_VERSION : Int = 3
 
 ///|
 /// SFTP 包
-struct SftpPacket {
+priv struct SftpPacket {
   typ : Byte
   id : Int
   data : Bytes
@@ -156,25 +126,26 @@ struct SftpPacket {
 ///|
 /// 文件属性
 pub struct SftpAttrs {
-  pub flags : Int
-  pub size : Int?
-  pub uid : Int?
-  pub gid : Int?
-  pub permissions : Int?
-  pub atime : Int?
-  pub mtime : Int?
+  flags : Int
+  size : Int?
+  uid : Int?
+  gid : Int?
+  permissions : Int?
+  atime : Int?
+  mtime : Int?
 }
 
 ///|
 /// 目录条目
 pub struct SftpDirEntry {
-  pub filename : String
-  pub longname : String
-  pub attrs : SftpAttrs
+  filename : String
+  longname : String
+  attrs : SftpAttrs
 }
 
 ///|
 /// SFTP 错误类型
+#warnings("-unused_constructor")
 enum SftpError {
   Status(Int, String)
   ProtocolError(String)
@@ -182,6 +153,7 @@ enum SftpError {
 
 ///|
 /// SFTP 客户端
+#warnings("-unused_field")
 pub struct SftpClient {
   priv client : Client
   priv channel : Channel
