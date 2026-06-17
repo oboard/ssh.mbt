@@ -11,7 +11,7 @@
 
 name = "PaiGack/ssh_client"
 
-version = "0.1.2"
+version = "0.2.0"
 
 readme = "README.md"
 
@@ -19,6 +19,6 @@ repository = "https://github.com/PaiGack/moonbitlang-OSC2026.git"
 
 license = "Apache-2.0"
 
-keywords = [ "SSH", "SSH Client", "SSH 客户端" ]
+keywords = [ "SSH", "SSH Client", "SSH 客户端", "SFTP" ]
 
 description = "使用 MoonBit 实现的 SSH 客户端库"

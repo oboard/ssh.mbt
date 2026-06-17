@@ -1,23 +1,48 @@
 ///|
 /// SFTP 客户端 CLI 入口
 /// 支持 get/put/ls/rm/mkdir 等命令
-
-fn init {
-  // 初始化
-}
-
 fn main {
-  run_main() catch { e => println("Error: \{e}") }
-}
+  let env_debug = @env.get_env_var("MOONBIT_SSH_DEBUG").unwrap_or("")
+  if env_debug == "1" || env_debug == "true" {
+    @src.enable_debug()
+  }
 
-fn run_main() -> Unit raise @src.SshError {
-  // 解析参数：user@host --port <port> --password <pwd> --command <cmd> <path>
-  let args = @utils.get_argv()
-  if args.length() == 0 {
+  let argv = @utils.get_argv()
+  if argv.length() == 0 {
     print_usage()
     return
   }
 
+  let (opts, password, command, paths) = parse_args(argv)
+  let client = @src.Client::connect(opts) catch {
+    e => abort("connect: " + e.to_string())
+  }
+  defer client.close()
+
+  client.kex() catch {
+    e => abort("kex: " + e.to_string())
+  }
+  client.auth_auto(password) catch {
+    e => abort("auth: " + e.to_string())
+  }
+
+  // 打开 SFTP 会话
+  let sftp = @src.SftpClient::open(client) catch {
+    e => abort("open: " + e.to_string())
+  }
+  defer sftp.close()
+
+  // 执行命令
+  cmd(sftp, command, paths) catch {
+    e => abort("cmd: " + e.to_string())
+  }
+}
+
+///|
+/// 解析参数：user@host --port <port> --password <pwd> --command <cmd> <path>
+fn parse_args(
+  argv : Array[String],
+) -> (@src.ConnectOptions, String, String, Array[String]) {
   // 解析连接字符串 user@host
   let mut connection = ""
   let mut port = 22
@@ -26,22 +51,19 @@ fn run_main() -> Unit raise @src.SshError {
   let paths : Array[String] = []
 
   let mut i = 0
-  while i < args.length() {
-    let arg = args[i]
-    if arg == "--port" && i + 1 < args.length() {
+  while i < argv.length() {
+    let arg = argv[i]
+    if arg == "--port" && i + 1 < argv.length() {
       i = i + 1
-      port = @strconv.parse_int(args[i]) catch {
-        _ => {
-          println("Invalid port: \{args[i]}")
-          return
-        }
+      port = @utils.parse_int(argv[i]) catch {
+        _ => abort("Invalid port: \{argv[i]}")
       }
-    } else if arg == "--password" && i + 1 < args.length() {
+    } else if arg == "--password" && i + 1 < argv.length() {
       i = i + 1
-      password = args[i]
-    } else if arg == "--command" && i + 1 < args.length() {
+      password = argv[i]
+    } else if arg == "--command" && i + 1 < argv.length() {
       i = i + 1
-      command = args[i]
+      command = argv[i]
     } else if arg.contains("@") {
       connection = arg
     } else {
@@ -51,9 +73,7 @@ fn run_main() -> Unit raise @src.SshError {
   }
 
   if connection.is_empty() {
-    println("Error: connection string (user@host) required")
-    print_usage()
-    return
+    abort("Error: connection string (user@host) required")
   }
 
   // 解析 user@host
@@ -63,82 +83,19 @@ fn run_main() -> Unit raise @src.SshError {
     user_host.push(part.to_owned())
   }
   if user_host.length() != 2 {
-    println("Error: invalid connection string '\{connection}'")
-    return
+    abort("missing user@host")
   }
   let user = user_host[0]
   let host = user_host[1]
 
-  // 连接并认证
-  let opts = @src.ConnectOptions::new(host, port, user)
-  let client = @src.Client::connect(opts)
-  client.kex()
-  client.auth_password(password)
-
-  // 打开 SFTP 会话
-  let sftp = @src.SftpClient::open(client)
-
-  // 执行命令
-  match command {
-    "ls" => {
-      let remote_path = if paths.length() > 0 { paths[0] } else { "." }
-      cmd_ls(sftp, remote_path)
-    }
-    "get" => {
-      if paths.length() < 1 {
-        println("Error: get requires remote path")
-        return
-      }
-      cmd_get(sftp, paths[0])
-    }
-    "put" => {
-      if paths.length() < 2 {
-        println("Error: put requires local and remote paths")
-        return
-      }
-      cmd_put(sftp, paths[0], paths[1])
-    }
-    "rm" => {
-      if paths.length() < 1 {
-        println("Error: rm requires path")
-        return
-      }
-      cmd_rm(sftp, paths[0])
-    }
-    "mkdir" => {
-      if paths.length() < 1 {
-        println("Error: mkdir requires path")
-        return
-      }
-      cmd_mkdir(sftp, paths[0])
-    }
-    "rmdir" => {
-      if paths.length() < 1 {
-        println("Error: rmdir requires path")
-        return
-      }
-      cmd_rmdir(sftp, paths[0])
-    }
-    "stat" => {
-      if paths.length() < 1 {
-        println("Error: stat requires path")
-        return
-      }
-      cmd_stat(sftp, paths[0])
-    }
-    "" => {
-      println("Error: command required")
-      print_usage()
-    }
-    _ => println("Unknown command: \{command}")
-  }
-
-  sftp.close()
-  client.close()
+  (@src.ConnectOptions::new(host, port, user), password, command, paths)
 }
 
+///|
 fn print_usage() -> Unit {
-  println("Usage: sftp user@host --port <port> --password <pwd> --command <cmd> <args>")
+  println(
+    "Usage: sftp user@host --port <port> --password <pwd> --command <cmd> <args>",
+  )
   println("")
   println("Commands:")
   println("  ls <path>              List directory")
@@ -150,17 +107,48 @@ fn print_usage() -> Unit {
   println("  stat <path>            Show file attributes")
 }
 
-fn cmd_ls(sftp : @src.SftpClient, path : String) -> Unit raise @src.SshError {
+///|
+fn cmd(
+  sftp : @src.SftpClient,
+  command : String,
+  paths : Array[String],
+) -> Unit raise @src.SshError {
+  match command {
+    "ls" => cmd_ls(sftp, paths)
+    "get" => cmd_get(sftp, paths)
+    "put" => cmd_put(sftp, paths)
+    "rm" => cmd_rm(sftp, paths)
+    "mkdir" => cmd_mkdir(sftp, paths)
+    "rmdir" => cmd_rmdir(sftp, paths)
+    "stat" => cmd_stat(sftp, paths)
+    _ => {
+      println("Unknown command: \{command}")
+      print_usage()
+    }
+  }
+}
+
+///|
+fn cmd_ls(
+  sftp : @src.SftpClient,
+  paths : Array[String],
+) -> Unit raise @src.SshError {
+  let path = if paths.length() > 0 { paths[0] } else { "." }
   let entries = sftp.listdir(path)
   for entry in entries {
     println("\{entry.longname}")
   }
 }
 
+///|
 fn cmd_get(
   sftp : @src.SftpClient,
-  remote_path : String
+  paths : Array[String],
 ) -> Unit raise @src.SshError {
+  if paths.length() < 1 {
+    abort("get requires remote path")
+  }
+  let remote_path = paths[0]
   let data = sftp.read_file(remote_path)
   println("Downloaded \{data.length()} bytes")
   // 这里简化处理，实际应该写入本地文件
@@ -178,39 +166,74 @@ fn cmd_get(
   println(preview)
 }
 
+///|
 fn cmd_put(
   sftp : @src.SftpClient,
-  _local : String,
-  remote : String
+  paths : Array[String],
 ) -> Unit raise @src.SshError {
+  if paths.length() < 2 {
+    abort("put requires local and remote paths")
+  }
+
+  let remote = paths[1]
+
   // 简化演示，上传一个测试字符串
   let test_data = b"Hello from MoonSSH SFTP client!\n"
   sftp.write_file(remote, test_data, 0o644)
   println("Uploaded \{test_data.length()} bytes to \{remote}")
 }
 
-fn cmd_rm(sftp : @src.SftpClient, path : String) -> Unit raise @src.SshError {
+///|
+fn cmd_rm(
+  sftp : @src.SftpClient,
+  paths : Array[String],
+) -> Unit raise @src.SshError {
+  if paths.length() < 1 {
+    abort("rm requires path")
+  }
+  let path = paths[0]
   sftp.remove(path)
   println("Removed \{path}")
 }
 
+///|
 fn cmd_mkdir(
   sftp : @src.SftpClient,
-  path : String
+  paths : Array[String],
 ) -> Unit raise @src.SshError {
+  if paths.length() < 1 {
+    abort("mkdir requires path")
+  }
+
+  let path = paths[0]
   sftp.mkdir(path, 0o755)
   println("Created directory \{path}")
 }
 
+///|
 fn cmd_rmdir(
   sftp : @src.SftpClient,
-  path : String
+  paths : Array[String],
 ) -> Unit raise @src.SshError {
+  if paths.length() < 1 {
+    abort("rmdir requires path")
+  }
+
+  let path = paths[0]
   sftp.rmdir(path)
   println("Removed directory \{path}")
 }
 
-fn cmd_stat(sftp : @src.SftpClient, path : String) -> Unit raise @src.SshError {
+///|
+fn cmd_stat(
+  sftp : @src.SftpClient,
+  paths : Array[String],
+) -> Unit raise @src.SshError {
+  if paths.length() < 1 {
+    abort("stat requires path")
+  }
+
+  let path = paths[0]
   let attrs = sftp.stat(path)
   println("File attributes for \{path}:")
   match attrs.size {

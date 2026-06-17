@@ -6,57 +6,141 @@
 
 // 请求类型
 const SSH_FXP_INIT : Byte = b'\x01'
+
+///|
 const SSH_FXP_OPEN : Byte = b'\x03'
+
+///|
 const SSH_FXP_CLOSE : Byte = b'\x04'
+
+///|
 const SSH_FXP_READ : Byte = b'\x05'
+
+///|
 const SSH_FXP_WRITE : Byte = b'\x06'
+
+///|
 const SSH_FXP_LSTAT : Byte = b'\x07'
+
+///|
 const SSH_FXP_FSTAT : Byte = b'\x08'
+
+///|
 const SSH_FXP_SETSTAT : Byte = b'\x09'
+
+///|
 const SSH_FXP_OPENDIR : Byte = b'\x0b'
+
+///|
 const SSH_FXP_READDIR : Byte = b'\x0c'
+
+///|
 const SSH_FXP_REMOVE : Byte = b'\x0d'
+
+///|
 const SSH_FXP_MKDIR : Byte = b'\x0e'
+
+///|
 const SSH_FXP_RMDIR : Byte = b'\x0f'
+
+///|
 const SSH_FXP_REALPATH : Byte = b'\x10'
+
+///|
 const SSH_FXP_STAT : Byte = b'\x11'
+
+///|
 const SSH_FXP_RENAME : Byte = b'\x12'
 
 // 响应类型
+
+///|
 const SSH_FXP_VERSION : Byte = b'\x02'
+
+///|
 const SSH_FXP_STATUS : Byte = b'\x65'
+
+///|
 const SSH_FXP_HANDLE : Byte = b'\x66'
+
+///|
 const SSH_FXP_DATA : Byte = b'\x67'
+
+///|
 const SSH_FXP_NAME : Byte = b'\x68'
+
+///|
 const SSH_FXP_ATTRS : Byte = b'\x69'
 
 // SSH_FXP_STATUS 错误码
+
+///|
 const SSH_FX_OK : Int = 0
+
+///|
 const SSH_FX_EOF : Int = 1
+
+///|
 const SSH_FX_NO_SUCH_FILE : Int = 2
+
+///|
 const SSH_FX_PERMISSION_DENIED : Int = 3
+
+///|
 const SSH_FX_FAILURE : Int = 4
+
+///|
 const SSH_FX_BAD_MESSAGE : Int = 5
+
+///|
 const SSH_FX_NO_CONNECTION : Int = 6
+
+///|
 const SSH_FX_CONNECTION_LOST : Int = 7
+
+///|
 const SSH_FX_OP_UNSUPPORTED : Int = 8
 
 // 文件打开标志
+
+///|
 pub const SSH_FXF_READ : Int = 0x00000001
+
+///|
 pub const SSH_FXF_WRITE : Int = 0x00000002
+
+///|
 pub const SSH_FXF_APPEND : Int = 0x00000004
+
+///|
 pub const SSH_FXF_CREAT : Int = 0x00000008
+
+///|
 pub const SSH_FXF_TRUNC : Int = 0x00000010
+
+///|
 pub const SSH_FXF_EXCL : Int = 0x00000020
 
 // 文件属性 flags
+
+///|
 const SSH_FILEXFER_ATTR_SIZE : Int = 0x00000001
+
+///|
 const SSH_FILEXFER_ATTR_UIDGID : Int = 0x00000002
+
+///|
 const SSH_FILEXFER_ATTR_PERMISSIONS : Int = 0x00000004
+
+///|
 const SSH_FILEXFER_ATTR_ACMODTIME : Int = 0x00000008
+
+///|
 const SSH_FILEXFER_ATTR_EXTENDED : Int = 0x80000000
 
 // SFTP 协议版本
+
+///|
 const SFTP_VERSION : Int = 3
 
 // ============== 数据结构 ==============
@@ -95,15 +179,6 @@ enum SftpError {
   Status(Int, String)
   ProtocolError(String)
 } derive(Show, Eq)
-
-///|
-/// 将 SftpError 转换为 SshError
-fn sftp_error_to_ssh(err : SftpError) -> SshError {
-  match err {
-    Status(code, msg) => ProtocolError("SFTP status \{code}: \{msg}")
-    ProtocolError(msg) => ProtocolError("SFTP: \{msg}")
-  }
-}
 
 ///|
 /// SFTP 客户端
@@ -724,11 +799,10 @@ pub fn SftpClient::listdir(
     }
     match batch {
       None => break
-      Some(items) => {
+      Some(items) =>
         for item in items {
           entries.push(item)
         }
-      }
     }
   }
 
@@ -740,7 +814,11 @@ pub fn SftpClient::listdir(
 /// 关闭 SFTP 通道
 pub fn SftpClient::close(self : SftpClient) -> Unit {
   let eof_msg = build_channel_eof(self.channel.peer_id())
-  self.client.write_packet(eof_msg) catch { _ => () }
+  self.client.write_packet(eof_msg) catch {
+    _ => ()
+  }
   let close_msg = build_channel_close(self.channel.peer_id())
-  self.client.write_packet(close_msg) catch { _ => () }
+  self.client.write_packet(close_msg) catch {
+    _ => ()
+  }
 }
