@@ -31,7 +31,7 @@ jobs:
           # ffi test
           echo moon test native
           moon test --target native --enable-coverage
-          moon coverage --target native report -f summary
+          moon coverage report -f summary
 
       - name: Run ssh-server scripts, start ssh server
         run: |
