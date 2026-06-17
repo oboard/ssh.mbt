@@ -8,11 +8,14 @@
 /// 通过 `enable_debug()` / `disable_debug()` 控制，或通过命令行 `--debug` 参数开启。
 let debug_enabled : Ref[Bool] = Ref(false)
 
+extern "C" fn openssl_set_debug(val : Int) -> Unit = "moonbitlang_ssh_set_debug"
+
 ///|
 /// 启用调试输出（同时控制 MoonBit 层和 C 层）。
 pub fn enable_debug() -> Unit {
   debug_enabled.val = true
   @socket.set_debug(true)
+  openssl_set_debug(1)
 }
 
 ///|
@@ -20,6 +23,7 @@ pub fn enable_debug() -> Unit {
 pub fn disable_debug() -> Unit {
   debug_enabled.val = false
   @socket.set_debug(false)
+  openssl_set_debug(0)
 }
 
 ///|
