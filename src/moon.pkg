@@ -12,6 +12,7 @@ options(
     "kex.mbt": [ "native" ],
     "kex_wbtest.mbt": [ "native" ],
     "auth.mbt": [ "native" ],
+    "auth_wbtest.mbt": [ "native" ],
     "channel.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],
     "sftp.mbt": [ "native" ],
