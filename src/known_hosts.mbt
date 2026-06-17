@@ -108,7 +108,7 @@ pub fn parse_line(line : String) -> KnownHost? raise SshError {
   }
   let key_alg = arr[1]
   let key = decode_base64(arr[2]) catch {
-    e => raise ProtocolError("known_hosts: base64: \{e}")
+    e => raise ProtocolError("known_hosts: base64: \{to_repr(e)}")
   }
   Some({ patterns, key_alg, key })
 }

@@ -412,7 +412,7 @@ pub enum KexState {
   ReadyForNewKeys
   InstallKeys
   Done
-} derive(Eq, Show)
+} derive(Eq, Debug)
 
 ///|
 pub struct KexContext {
@@ -508,10 +508,10 @@ pub fn KexContext::drive(
   let server_kexinit = safe_read()
   self.i_s = server_kexinit
   let server = parse_kexinit(server_kexinit)
-  debug("Server KEX algorithms: \{server.kex_algs}")
-  debug("Server host key algs: \{server.host_key_algs}")
-  debug("Server enc algorithms: \{server.enc_s2c}")
-  debug("Server mac algorithms: \{server.mac_s2c}")
+  debug("Server KEX algorithms: \{to_repr(server.kex_algs)}")
+  debug("Server host key algs: \{to_repr(server.host_key_algs)}")
+  debug("Server enc algorithms: \{to_repr(server.enc_s2c)}")
+  debug("Server mac algorithms: \{to_repr(server.mac_s2c)}")
   self.state = Negotiating
 
   // 3. 协商算法
@@ -558,7 +558,7 @@ fn KexContext::drive_ecdh(
 ) -> Unit raise SshError {
   // a. 生成 ECDH 密钥对
   let (priv_key, client_pub_bytes) = @crypto.ecdh_nistp256_generate() catch {
-    e => raise ProtocolError("kex: ecdh gen: \{e}")
+    e => raise ProtocolError("kex: ecdh gen: \{to_repr(e)}")
   }
 
   // b. 发送 ECDH_INIT(Q_C)
@@ -586,7 +586,7 @@ fn KexContext::drive_ecdh(
 
   // e. 计算共享密钥 K
   let shared = @crypto.ecdh_nistp256_derive(priv_key, reply.server_public) catch {
-    e => raise ProtocolError("kex: ecdh derive: \{e}")
+    e => raise ProtocolError("kex: ecdh derive: \{to_repr(e)}")
   }
   self.shared_secret = shared
 
@@ -603,7 +603,7 @@ fn KexContext::drive_ecdh(
     reply.server_public,
     shared,
   ) catch {
-    e => raise ProtocolError("kex: hash: \{e}")
+    e => raise ProtocolError("kex: hash: \{to_repr(e)}")
   }
   if !self.session_id_set {
     self.session_id = self.exchange_hash
@@ -647,7 +647,7 @@ fn KexContext::drive_dh(
 
   // a. 生成随机私钥 x（256 字节），确保是奇数
   let x_bytes = @crypto.rand_bytes(256) catch {
-    e => raise ProtocolError("kex: rand: \{e}")
+    e => raise ProtocolError("kex: rand: \{to_repr(e)}")
   }
   let x_bi = @bigint.BigInt::from_octets(x_bytes)
   let two = @bigint.BigInt::from_int(2)
@@ -698,7 +698,7 @@ fn KexContext::drive_dh(
     f_bytes,
     k_bytes,
   ) catch {
-    e => raise ProtocolError("kex: hash: \{e}")
+    e => raise ProtocolError("kex: hash: \{to_repr(e)}")
   }
   if !self.session_id_set {
     self.session_id = self.exchange_hash
@@ -775,7 +775,7 @@ fn verify_host_key_signature(
   }
 
   let valid = pkey.verify(md_alg, exchange_hash, sig_blob.sig) catch {
-    e => raise ProtocolError("kex: verify failed: \{e}")
+    e => raise ProtocolError("kex: verify failed: \{to_repr(e)}")
   }
   if !valid {
     raise ProtocolError("kex: host key signature is invalid")
@@ -799,7 +799,7 @@ fn parse_host_key_to_pkey(
       let e = r.read_string()
       let n = r.read_string()
       @crypto.PKey::from_rsa_components(n, e) catch {
-        e => raise ProtocolError("kex: failed to load RSA key: \{e}")
+        e => raise ProtocolError("kex: failed to load RSA key: \{to_repr(e)}")
       }
     }
     "ssh-dss" => {
@@ -808,14 +808,14 @@ fn parse_host_key_to_pkey(
       let g = r.read_string()
       let y = r.read_string()
       @crypto.PKey::from_dsa_components(p, q, g, y) catch {
-        e => raise ProtocolError("kex: failed to load DSA key: \{e}")
+        e => raise ProtocolError("kex: failed to load DSA key: \{to_repr(e)}")
       }
     }
     "ecdsa-sha2-nistp256" | "ecdsa-sha2-nistp384" | "ecdsa-sha2-nistp521" => {
       let curve_id = r.read_string_as_str()
       let point = r.read_string()
       @crypto.PKey::from_ec_point(curve_id, point) catch {
-        e => raise ProtocolError("kex: failed to load ECDSA key: \{e}")
+        e => raise ProtocolError("kex: failed to load ECDSA key: \{to_repr(e)}")
       }
     }
     _ => raise ProtocolError("kex: unsupported host key \{alg}")
@@ -860,7 +860,7 @@ pub fn KexContext::derive_session_keys(
     iv_len,
     mac_key_len,
   ) catch {
-    e => raise ProtocolError("kex: key derivation failed: \{e}")
+    e => raise ProtocolError("kex: key derivation failed: \{to_repr(e)}")
   }
   {
     iv_c2s,

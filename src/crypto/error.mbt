@@ -8,4 +8,4 @@ pub suberror CryptoError {
   OperationFailed(String, String)
   /// 参数无效。
   InvalidArgument(String)
-} derive(Eq, Show)
+} derive(Eq, Debug)

@@ -15,19 +15,19 @@ fn main {
   }
   let (opts, password, command) = parse_args(argv)
   let client = @src.Client::connect(opts) catch {
-    e => abort("connect: " + e.to_string())
+    e => abort("connect: \{to_repr(e)}")
   }
   defer client.close()
   client.kex() catch {
-    e => abort("kex: " + e.to_string())
+    e => abort("kex: \{to_repr(e)}")
   }
   client.auth_auto(password) catch {
-    e => abort("auth: " + e.to_string())
+    e => abort("auth: \{to_repr(e)}")
   }
 
   let ch = client.open_session()
   let (stdout, stderr) = client.exec(ch, command) catch {
-    e => abort("exec: " + e.to_string())
+    e => abort("exec: \{to_repr(e)}")
   }
   if stdout.length() > 0 {
     println(stdout)

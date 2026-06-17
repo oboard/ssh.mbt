@@ -41,4 +41,4 @@ pub suberror SshError {
   /// 数据解析失败，例如 Reader 剩余字节不足、UTF-8 非法、
   /// mpint / name-list 格式错误等。
   ParseError(String)
-} derive(Show, Eq)
+} derive(Eq, Debug)

@@ -145,7 +145,7 @@ pub fn Client::auth_password(
   let reply2 = self.read_auth_packet()
   match parse_auth_reply(reply2) {
     Success => self.auth.apply_reply(Success)
-    Failure(methods, _) => raise AuthFailed("methods: \{methods}")
+    Failure(methods, _) => raise AuthFailed("methods: \{to_repr(methods)}")
     _ => raise ProtocolError("auth: unexpected reply")
   }
 }
@@ -176,14 +176,14 @@ pub fn Client::auth_publickey(
 
   // 加载私钥
   let pkey = @crypto.PKey::load_private_key(private_key_path) catch {
-    e => raise ProtocolError("auth: load key: \{e}")
+    e => raise ProtocolError("auth: load key: \{to_repr(e)}")
   }
   defer pkey.close()
 
   // 从 .pub 文件读取公钥 (alg, blob)
   let pubkey_path = private_key_path + ".pub"
   let (pub_alg, pubkey_blob) = @crypto.read_openssh_pubkey(pubkey_path) catch {
-    e => raise ProtocolError("auth: read pubkey \{pubkey_path}: \{e}")
+    e => raise ProtocolError("auth: read pubkey \{pubkey_path}: \{to_repr(e)}")
   }
 
   // 根据私钥类型决定签名算法
@@ -223,7 +223,7 @@ pub fn Client::auth_publickey(
   match parse_auth_reply(reply1) {
     PublicKeyOk(_alg, _blob) => ()
     Failure(methods, _) =>
-      raise AuthFailed("publickey rejected: methods \{methods}")
+      raise AuthFailed("publickey rejected: methods \{to_repr(methods)}")
     _ => raise ProtocolError("auth: expected PK_OK")
   }
 
@@ -236,7 +236,7 @@ pub fn Client::auth_publickey(
     pubkey_blob,
   )
   let signature = pkey.sign(md_alg, sig_input) catch {
-    e => raise ProtocolError("auth: sign: \{e}")
+    e => raise ProtocolError("auth: sign: \{to_repr(e)}")
   }
 
   // 将签名打包为 SSH signature blob (alg || sig)
@@ -286,7 +286,7 @@ pub fn Client::auth_keyboard_interactive(
         return
       }
       Failure(methods, _) =>
-        raise AuthFailed("kbd-int rejected: methods \{methods}")
+        raise AuthFailed("kbd-int rejected: methods \{to_repr(methods)}")
       _ => {
         // 收到 INFO_REQUEST
         let responses = [answer_fn("Password: ")]
@@ -355,7 +355,7 @@ pub fn Client::auth_auto(
         self.auth_password(password)
         return
       }
-      raise AuthFailed("no supported auth methods: \{methods}")
+      raise AuthFailed("no supported auth methods: \{to_repr(methods)}")
     }
     _ => raise ProtocolError("auth: unexpected probe reply")
   }
@@ -573,7 +573,7 @@ fn Client::install_encryption(
     keys.iv_c2s,
     encrypt=true,
   ) catch {
-    e => raise ProtocolError("install cipher: \{e}")
+    e => raise ProtocolError("install cipher: \{to_repr(e)}")
   }
   let cipher_s2c = @crypto.Cipher::new(
     enc_alg,
@@ -581,7 +581,7 @@ fn Client::install_encryption(
     keys.iv_s2c,
     encrypt=false,
   ) catch {
-    e => raise ProtocolError("install cipher: \{e}")
+    e => raise ProtocolError("install cipher: \{to_repr(e)}")
   }
   self.cipher_c2s = Some(cipher_c2s)
   self.cipher_s2c = Some(cipher_s2c)
@@ -632,10 +632,10 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
       // including packet_length is encrypted. Read and decrypt 4 bytes
       // first to get the actual packet_length.
       let enc_len = conn.read_exact(4) catch {
-        e => raise IoError("read pkt len: \{e}")
+        e => raise IoError("read pkt len: \{to_repr(e)}")
       }
       let len_bytes = cipher.update(enc_len) catch {
-        e => raise ProtocolError("decrypt pkt len: \{e}")
+        e => raise ProtocolError("decrypt pkt len: \{to_repr(e)}")
       }
       let packet_length = decode_uint32(len_bytes)
       debug(
@@ -678,7 +678,7 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
 
       // Decrypt body
       let plaintext_body = cipher.update(enc_body) catch {
-        e => raise ProtocolError("decrypt: \{e}")
+        e => raise ProtocolError("decrypt: \{to_repr(e)}")
       }
       hex_dump(
         "  body (decrypted, \{plaintext_body.length()} bytes)",
@@ -796,12 +796,12 @@ fn Client::write_encrypted_packet(
         full_plain,
       )
       let encrypted = cipher.update(full_plain) catch {
-        e => raise ProtocolError("encrypt: \{e}")
+        e => raise ProtocolError("encrypt: \{to_repr(e)}")
       }
       let wire_data = encrypted + mac
       hex_dump("  packet on wire (\{wire_data.length()} bytes)", wire_data)
       conn.write_bytes(wire_data) catch {
-        e => raise IoError("write: \{e}")
+        e => raise IoError("write: \{to_repr(e)}")
       }
       self.seq_send = self.seq_send + 1U
     }
@@ -817,7 +817,7 @@ fn compute_mac_s2c(client : Client, data : Bytes) -> Bytes raise SshError {
   }
   let seq_bytes = encode_uint32(client.seq_recv.reinterpret_as_int())
   mac_ctx.hmac_on(seq_bytes + data) catch {
-    e => raise ProtocolError("MAC compute s2c: \{e}")
+    e => raise ProtocolError("MAC compute s2c: \{to_repr(e)}")
   }
 }
 
@@ -831,7 +831,7 @@ fn compute_mac(client : Client, data : Bytes) -> Bytes raise SshError {
   mac_ctx.update(seq_bytes)
   mac_ctx.update(data)
   let tag = mac_ctx.finalize() catch {
-    e => raise ProtocolError("MAC compute: \{e}")
+    e => raise ProtocolError("MAC compute: \{to_repr(e)}")
   }
   debug(
     "* compute_mac: seq_send=\{client.seq_send}, data_len=\{data.length()}, tag_len=\{tag.length()}",

@@ -149,7 +149,7 @@ pub struct SftpDirEntry {
 enum SftpError {
   Status(Int, String)
   ProtocolError(String)
-} derive(Show, Eq)
+} derive(Eq, Debug)
 
 ///|
 /// SFTP 客户端

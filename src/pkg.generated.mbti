@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "PaiGack/ssh_client/src"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub fn decode_base64(String) -> Bytes raise SshError
 
@@ -21,7 +25,7 @@ pub suberror SshError {
   AuthFailed(String)
   RequestDenied(String)
   ParseError(String)
-} derive(Eq, Show)
+} derive(Eq, @debug.Debug)
 
 // Types and methods
 pub struct KnownHost {

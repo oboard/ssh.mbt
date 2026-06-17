@@ -15,26 +15,26 @@ fn main {
 
   let (opts, password, command, paths) = parse_args(argv)
   let client = @src.Client::connect(opts) catch {
-    e => abort("connect: " + e.to_string())
+    e => abort("connect: \{to_repr(e)}")
   }
   defer client.close()
 
   client.kex() catch {
-    e => abort("kex: " + e.to_string())
+    e => abort("kex: \{to_repr(e)}")
   }
   client.auth_auto(password) catch {
-    e => abort("auth: " + e.to_string())
+    e => abort("auth: \{to_repr(e)}")
   }
 
   // 打开 SFTP 会话
   let sftp = @src.SftpClient::open(client) catch {
-    e => abort("open: " + e.to_string())
+    e => abort("open: \{to_repr(e)}")
   }
   defer sftp.close()
 
   // 执行命令
   cmd(sftp, command, paths) catch {
-    e => abort("cmd: " + e.to_string())
+    e => abort("cmd: \{to_repr(e)}")
   }
 }
 
