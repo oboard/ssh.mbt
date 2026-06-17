@@ -1,0 +1,10 @@
+import {
+  "moonbitlang/core/strconv",
+  "PaiGack/ssh_client/src",
+  "PaiGack/ssh_client/cmd/utils",
+}
+
+options(
+  is_main: true,
+  supported_targets: "+native",
+)

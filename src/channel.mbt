@@ -150,6 +150,20 @@ pub fn build_channel_request_shell(recipient_channel : Int) -> Bytes {
 }
 
 ///|
+pub fn build_channel_request_subsystem(
+  recipient_channel : Int,
+  subsystem : String,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_CHANNEL_REQUEST)
+  w.write_uint32(recipient_channel)
+  w.write_string_from_str("subsystem")
+  w.write_byte(1) // want_reply
+  w.write_string_from_str(subsystem)
+  w.to_bytes()
+}
+
+///|
 pub fn build_channel_request_pty(
   recipient_channel : Int,
   term : String,

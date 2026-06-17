@@ -8,8 +8,6 @@
 
 ## 1. 项目状态
 
-**当前版本：v0.1.2**
-
 | 能力 | 状态 | 说明 |
 |------|------|------|
 | TCP 传输层 | ✅ | `src/socket/socket.mbt` + `socket.c`（自带 socket FFI，支持 POSIX 与 Winsock2） |
@@ -25,17 +23,17 @@
 | `exec` 命令执行 | ✅ | `Client::exec()` 返回 `(stdout, stderr)` |
 | `shell` 通道 | ✅ | `Client::shell()`（不管理交互式 I/O，仅打开 shell 通道） |
 | `known_hosts` 解析 | ✅ | 基础解析 + 通配符；HMAC-SHA1 哈希形式（`\|1\|…`）待支持 |
+| SFTP | ✅ | SFTP v3 协议实现（`src/sftp.mbt`）|
 | 端口转发 / X11 | ❌ | 未实现 |
-| SFTP | ❌ | 未实现（无 `src/sftp.mbt`） |
 
 ## 2. 架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  cmd/{password,key-ed25519,key-rsa,key-ecdsa}/          │
+│  cmd/{password,key,sftp}/                               │
 │                       ── CLI 入口（按认证方式分命令）     │
 └────────────────────────┬────────────────────────────────┘
-                         │  @src.Client
+                         │  @src.Client / @src.SftpClient
 ┌────────────────────────▼────────────────────────────────┐
 │  src/ssh_client.mbt       ── 顶层 API                   │
 │   • ConnectOptions        ── 连接选项（含 verifier）     │
@@ -65,8 +63,16 @@
       │     │  channel.mbt        │      │
       │     │  • session / exec   │      │
       │     │  • shell / pty-req  │      │
+      │     │  • subsystem (sftp) │      │
       │     │  • window adjust    │      │
       │     │  • stdout/stderr    │      │
+      │     └──────────┬──────────┘      │
+      │                │                 │
+      │     ┌──────────▼──────────┐      │
+      │     │  sftp.mbt           │      │
+      │     │  • SFTP v3 协议     │      │
+      │     │  • 文件传输         │      │
+      │     │  • 目录管理         │      │
       │     └──────────┬──────────┘      │
       │                │                 │
       │     ┌──────────▼──────────┐      │
@@ -135,11 +141,11 @@ moonbit-ssh-client/
 ├── README.md
 ├── README.mbt.md                mooncakes.io 简介
 ├── LICENSE                      Apache-2.0
-├── moon.mod                     模块清单（name: PaiGack/ssh_client, version: 0.1.1）
+├── moon.mod                     模块清单
 ├── moon.pkg                     根包（仅导入子包）
-├── ssh_client.mbt               根包占位（实际 API 在 src/ssh_client.mbt）
-├── ssh_client_test.mbt          黑盒测试（占位注释）
-├── ssh_client_wbtest.mbt        白盒测试（占位注释）
+├── ssh_client.mbt               根包占位
+├── ssh_client_test.mbt          黑盒测试
+├── ssh_client_wbtest.mbt        白盒测试
 ├── pkg.generated.mbti           根包生成接口
 ├── .cnb.yml                     CNB 开发环境配置（含 docker sshd 自启）
 ├── src/                         ★ 核心库
@@ -150,7 +156,8 @@ moonbit-ssh-client/
 │   ├── packet.mbt               包序列化（length/padding/payload/MAC）+ Reader/Writer
 │   ├── kex.mbt                  KEXINIT 状态机、密钥派生
 │   ├── auth.mbt                 用户认证（password / publickey / kbd-int / none）
-│   ├── channel.mbt              通道（session/exec/shell/pty-req，状态机 + stdout/stderr）
+│   ├── channel.mbt              通道（session/exec/shell/pty-req/subsystem，状态机 + stdout/stderr）
+│   ├── sftp.mbt                 SFTP v3 协议（文件传输 / 目录管理）
 │   ├── known_hosts.mbt          known_hosts 解析 + 通配符匹配
 │   ├── socket/                  ★ TCP 传输层（自实现 FFI）
 │   │   ├── moon.pkg
@@ -171,13 +178,14 @@ moonbit-ssh-client/
 │       └── error.mbt            CryptoError
 ├── cmd/                         ★ CLI 入口（按认证方式分多个子命令）
 │   ├── output/                  Hello MoonBit 演示
+│   ├── utils/                   CMD args 等工具封装
 │   ├── password/                密码认证（auth_auto）
-│   ├── key-ed25519/             Ed25519 公钥认证
-│   ├── key-rsa/                 RSA 公钥认证
-│   └── key-ecdsa/               ECDSA 公钥认证
+│   ├── key-ecdsa/               Ed25519/RSA/ECDSA 公钥认证
+│   └── sftp/                    SFTP 文件传输客户端
 ├── docs/
 │   ├── prd_000.md                       设计 PRD
 │   ├── prd_001_ssh-key-types-support-plan.md   密钥类型扩展计划
+│   ├── prd_002_sftp-support-plan.md     SFTP 实现计划
 │   └── crypto-replacement-plan.md       OpenSSL 替换为 MoonBit 原生实现的方案
 └── scripts/
     └── ssh-server/              本地 docker sshd 脚本（每个认证方式独立）
@@ -268,60 +276,44 @@ moon build . --target native
 
 ```bash
 # 前置：bash scripts/ssh-server/key-ed25519.sh  # 或 key-rsa.sh / key-ecdsa.sh
-cd cmd/key-ed25519
-./run.sh
+cd cmd/key
+./run-ed25519.sh
 # 内部使用：--key /workspace/scripts/ssh-server/id_ed25519
 #          （路径是 docker 容器内的位置；如果你直接在本地运行，请改为宿主机路径）
 ```
 
 > **路径注意：** `run.sh` 默认 `--key` 指向 docker 容器内路径 `/workspace/scripts/ssh-server/id_*`；如果 sshd 跑在本地而非 docker，请把路径改成宿主机上的实际位置。
 
-## 5. CLI 参数
+#### 4.3.3 SFTP 文件传输
 
-每个 `cmd/*/main.mbt` 通过 `MOONBIT_CLI_ARGS` 传入参数（支持单/双引号包裹空格）：
+```bash
+# 前置：bash scripts/ssh-server/password.sh
+cd cmd/sftp
 
-| 参数 | 别名 | 说明 | 默认 |
-|------|------|------|------|
-| `user@host` | — | 必填，用户名 + 主机（无 `@` 时默认用户 `root`） | — |
-| `-p <port>` | `--port` | SSH 端口 | `22` |
-| `-l <user>` | `--user` | 用户名（覆盖 `user@host` 中的 user） | `user@host` 中的 user |
-| `-e <cmd>` | `--exec` | 远端要执行的命令 | `uname -a` |
-| `--password <pwd>` | — | 密码（仅 `cmd/password`） | `""` |
-| `-i <path>` | `--key` / `--identity` | 私钥路径（仅 `cmd/key-*`） | `~/.ssh/id_<alg>` |
-| `-d` | `--debug` | 启用 MoonBit / C 层 debug 输出 | 关 |
+# 列出目录
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command ls /"
+../../_build/native/debug/build/cmd/sftp/sftp.exe
 
-也可以设置 `MOONBIT_SSH_DEBUG=1`（或 `true`）从环境变量开启 debug。
+# 下载文件
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command get /tmp/file.txt"
+../../_build/native/debug/build/cmd/sftp/sftp.exe
 
-## 6. 作为库使用
+# 上传文件
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command put local.txt /tmp/remote.txt"
+../../_build/native/debug/build/cmd/sftp/sftp.exe
 
-`moon.mod` 中声明的模块名是 `PaiGack/ssh_client`，核心 API 落在子包 `PaiGack/ssh_client/src`：
+# 查看文件属性
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command stat /tmp/file.txt"
+../../_build/native/debug/build/cmd/sftp/sftp.exe
 
-```moonbit
-import {
-  "PaiGack/ssh_client/src",
-}
-
-async fn example() -> Unit raise {
-  let opts = @src.ConnectOptions::new("example.com", 22, "alice")
-  let client = @src.Client::connect(opts)
-  defer client.close()
-
-  client.kex()
-
-  // 任意一种认证方式：
-  client.auth_password("hunter2")
-  // 或：client.auth_publickey("~/.ssh/id_rsa")
-  // 或：client.auth_keyboard_interactive(prompt => password)
-  // 或：client.auth_auto(password, key_path="~/.ssh/id_rsa")
-
-  let ch = client.open_session()
-  let (stdout, stderr) = client.exec(ch, "ls -l")
-  println("stdout: \{stdout}")
-  println("stderr: \{stderr}")
-}
+# 创建/删除目录
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command mkdir /tmp/newdir"
+../../_build/native/debug/build/cmd/sftp/sftp.exe
 ```
 
-### 6.1 `ConnectOptions`
+## 5. 核心模块
+
+### 5.1 `ConnectOptions`
 
 ```moonbit
 pub struct ConnectOptions {
@@ -348,7 +340,7 @@ let opts = @src.ConnectOptions::new("example.com", 22, "alice")
 
 > **注：** `ConnectOptions` 当前只暴露 `with_host_key_verifier()`；自定义 banner / 超时等字段暂未提供 `with_*` setter。
 
-### 6.2 `Client` 顶层 API
+### 5.2 `Client` 顶层 API
 
 | 方法 | 说明 |
 |------|------|
@@ -363,7 +355,7 @@ let opts = @src.ConnectOptions::new("example.com", 22, "alice")
 | `Client::shell(ch) -> Unit raise SshError` | 打开 shell 通道（不管理交互式 I/O） |
 | `Client::close() -> Unit` | 关闭 TCP 连接 |
 
-### 6.3 `Channel`
+### 5.3 `Channel`
 
 ```moonbit
 pub struct Channel {
@@ -382,7 +374,38 @@ pub fn Channel::exit_status(self) -> Int?
 
 通道底层消息：OPEN / OPEN_CONFIRMATION / OPEN_FAILURE / WINDOW_ADJUST / DATA / EXTENDED_DATA / EOF / CLOSE / REQUEST（含 `exit-status` / `exit-signal` / `exec` / `shell` / `pty-req`）。
 
-### 6.4 `known_hosts`
+### 5.4 `SftpClient`
+
+SFTP v3 文件传输协议客户端：
+
+```moonbit
+pub struct SftpClient {
+  // 内部字段
+}
+
+// 初始化
+pub fn SftpClient::open(client : Client) -> SftpClient raise SshError
+
+// 高层 API
+pub fn SftpClient::read_file(path : String) -> Bytes raise SshError
+pub fn SftpClient::write_file(path : String, data : Bytes, permissions : Int) -> Unit raise SshError
+pub fn SftpClient::listdir(path : String) -> Array[SftpDirEntry] raise SshError
+
+// 底层 API
+pub fn SftpClient::open_file(path : String, flags : Int) -> Bytes raise SshError
+pub fn SftpClient::read(handle : Bytes, offset : Int, length : Int) -> Bytes raise SshError
+pub fn SftpClient::write(handle : Bytes, offset : Int, data : Bytes) -> Unit raise SshError
+pub fn SftpClient::close_handle(handle : Bytes) -> Unit raise SshError
+pub fn SftpClient::stat(path : String) -> SftpAttrs raise SshError
+pub fn SftpClient::remove(path : String) -> Unit raise SshError
+pub fn SftpClient::mkdir(path : String, permissions : Int) -> Unit raise SshError
+pub fn SftpClient::rmdir(path : String) -> Unit raise SshError
+pub fn SftpClient::rename(oldpath : String, newpath : String) -> Unit raise SshError
+pub fn SftpClient::realpath(path : String) -> String raise SshError
+pub fn SftpClient::close() -> Unit
+```
+
+### 5.5 `known_hosts`
 
 `src/known_hosts.mbt` 提供 OpenSSH `known_hosts` 文件的解析与匹配：
 
@@ -401,9 +424,9 @@ pub fn KnownHost::key_bytes(self) -> Bytes
 支持通配符（`*` / `?`）；`host:port` 形式自动展开为 `[host]:port`（当 port ≠ 22）。
 **尚未支持** HMAC-SHA1 哈希形式（`|1|…`）——遇到会直接返回不匹配。
 
-## 7. 开发流程
+## 6. 开发流程
 
-### 7.1 修改后必跑
+### 6.1 修改后必跑
 
 ```bash
 moon fmt                          # 格式化
@@ -412,35 +435,35 @@ moon build --target native        # 编译
 moon test --target native         # 测试
 ```
 
-### 7.2 覆盖率
+### 6.2 覆盖率
 
 ```bash
 moon coverage analyze > uncovered.log
 # 目标：uncovered.log 中 packet / kex / auth 关键路径为空
 ```
 
-### 7.3 派生代码
+### 6.3 派生代码
 
 `src/socket/`（`socket.mbt` / `socket.c`）派生于 `moonbitlang/async/tls`（Apache 2.0）。任何修改请保留：
 
 - 原 Apache 2.0 版权头
 - 命名空间调整记录（`moonbitlang/async/socket` → `src/socket`）
 
-## 8. 路线图
+## 7. 路线图
 
 | 版本 | 内容 | 状态 |
 |------|------|------|
-| **v0.1**（当前 v0.1.2） | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
-| **v0.2** | shell 交互式 I/O（stdin 转发）；pty-req 对接 Client 高层 API；端口转发；SFTP 协议层 | 📋 待开发 |
-| **v1.0** | 文档补全 + CI 矩阵（Linux/macOS/Windows）+ 发布到 mooncakes.io | 📋 待开发 |
+| **v0.1** | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
+| **v0.2** | SFTP 协议 | ✅ 已发布 |
+| **v0.3** | shell 交互式 I/O（stdin 转发）/ pty-req 对接 / 端口转发 | 🚧 进行中 |
+| **v0.4** | 文档补全 + CI 矩阵（Linux/macOS/Windows） | 📋 待开发 |
 
-**v0.1 待完成项：**
+**进展：**
 - [ ] shell 交互（stdin/stdout 转发）
 - [ ] `Client::exec_pty()` 高层封装（`build_channel_request_pty` 已就绪）
-- [ ] `known_hosts` 哈希形式（`|1|…`）支持
-- [ ] 与真实 sshd 的自动化集成测试（CI 拉起 docker sshd）
+- [ ] 端口转发（local/remote forwarding）
 
-## 9. 跨平台注意
+## 8. 跨平台注意
 
 | 平台 | 编译 | 运行 | 说明 |
 |------|------|------|------|
@@ -448,7 +471,7 @@ moon coverage analyze > uncovered.log
 | macOS | ✅ | ✅ | 完全支持 |
 | Windows MinGW (Winsock2) | ✅ | ✅ | 完全支持 |
 
-## 10. 引用
+## 9. 引用
 
 - [RFC 4251](https://tools.ietf.org/html/rfc4251) — SSH Protocol Architecture
 - [RFC 4252](https://tools.ietf.org/html/rfc4252) — SSH Authentication Protocol
@@ -459,8 +482,10 @@ moon coverage analyze > uncovered.log
 - [RFC 6668](https://tools.ietf.org/html/rfc6668) — SHA-2 Data Integrity Verification for SSH
 - [RFC 8332](https://tools.ietf.org/html/rfc8332) — Use of RSA Keys with SHA-256/512
 - [OpenSSL EVP](https://docs.openssl.org/3.0/manuals/) — 密码学 API
+- [draft-ietf-secsh-filexfer-02](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02) — SSH File Transfer Protocol v3
+- [OpenSSH sftp-server](https://github.com/openssh/openssh-portable) - SFTP
 - [moonbitlang/async](https://mooncakes.io/docs/moonbitlang/async) — 派生来源（Apache 2.0）
 
-## 11. License
+## 10. License
 
 Apache-2.0。详见 [LICENSE](LICENSE)。

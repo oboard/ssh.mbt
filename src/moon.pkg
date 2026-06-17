@@ -14,5 +14,6 @@ options(
     "auth.mbt": [ "native" ],
     "channel.mbt": [ "native" ],
     "ssh_client.mbt": [ "native" ],
+    "sftp.mbt": [ "native" ],
   },
 )
