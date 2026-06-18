@@ -86,3 +86,6 @@ jobs:
           cd cmd/sftp
           chmod +x run.sh
           bash run.sh
+
+      - name: Tokei
+        run: docker run --rm -v $(pwd):/src ghcr.io/xampprocky/tokei:latest .
