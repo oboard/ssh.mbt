@@ -24,7 +24,10 @@
 | `shell` 通道 | ✅ | `Client::shell()`（不管理交互式 I/O，仅打开 shell 通道） |
 | `known_hosts` 解析 | ✅ | 基础解析 + 通配符；HMAC-SHA1 哈希形式（`\|1\|…`）待支持 |
 | SFTP | ✅ | SFTP v3 协议实现（`src/sftp.mbt`）|
-| 端口转发 / X11 | ❌ | 未实现 |
+| 本地端口转发 (-L) | ✅ | `Client::forward_local_port()` — `direct-tcpip` 通道 |
+| 远程端口转发 (-R) | ✅ | `Client::forward_remote_port()` — `tcpip-forward` 全局请求 + `forwarded-tcpip` 通道 |
+| SOCKS5 动态转发 (-D) | ✅ | `Client::forward_socks5()` — SOCKS5 代理 |
+| X11 转发 | ❌ | 未实现 |
 
 ## 2. 架构
 
@@ -46,6 +49,9 @@
 │   • Client::open_session  ── 打开 session 通道           │
 │   • Client::exec          ── 命令执行（stdout,stderr）   │
 │   • Client::shell         ── shell 通道                 │
+│   • Client::forward_local_port  ── 本地转发 (-L)       │
+│   • Client::forward_remote_port ── 远程转发 (-R)       │
+│   • Client::forward_socks5      ── SOCKS5 代理 (-D)    │
 │   • Client::close         ── 清理                       │
 └────────────────────────┬────────────────────────────────┘
                          │
@@ -180,12 +186,14 @@ moonbit-ssh-client/
 │   ├── output/                  Hello MoonBit 演示
 │   ├── utils/                   CMD args 等工具封装
 │   ├── password/                密码认证（auth_auto）
-│   ├── key-ecdsa/               Ed25519/RSA/ECDSA 公钥认证
-│   └── sftp/                    SFTP 文件传输客户端
+│   ├── key/               Ed25519/RSA/ECDSA 公钥认证
+│   ├── sftp/                    SFTP 文件传输客户端
+│   └── forward/                 端口转发（-L / -R / -D）
 ├── docs/
 │   ├── prd_000.md                       设计 PRD
 │   ├── prd_001_ssh-key-types-support-plan.md   密钥类型扩展计划
 │   ├── prd_002_sftp-support-plan.md     SFTP 实现计划
+│   ├── prd_002_port-forwarding-plan.md         端口转发设计文档
 │   └── crypto-replacement-plan.md       OpenSSL 替换为 MoonBit 原生实现的方案
 └── scripts/
     └── ssh-server/              本地 docker sshd 脚本（每个认证方式独立）
@@ -311,6 +319,29 @@ export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command
 ../../_build/native/debug/build/cmd/sftp/sftp.exe
 ```
 
+#### 4.3.4 端口转发
+
+端口转发通过统一的 `cmd/forward/` 入口，使用 `-L` / `-R` / `-D` 参数区分模式：
+
+```bash
+# 前置：bash scripts/ssh-server/password.sh
+cd cmd/forward
+
+# 本地转发 (-L)：本地 8080 → 通过 SSH → 远端 localhost:80
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -L 8080:localhost:80 --password 123456"
+../../_build/native/debug/build/cmd/forward/forward.exe
+# 然后访问 http://127.0.0.1:8080
+
+# 远程转发 (-R)：远端 9090 → 通过 SSH → 本地 localhost:3000
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -R 9090:localhost:3000 --password 123456"
+../../_build/native/debug/build/cmd/forward/forward.exe
+
+# SOCKS5 代理 (-D)：本地 1080 作为 SOCKS5 代理
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -D 1080 --password 123456"
+../../_build/native/debug/build/cmd/forward/forward.exe
+# 然后 curl --socks5 127.0.0.1:1080 http://example.com
+```
+
 ## 5. 核心模块
 
 ### 5.1 `ConnectOptions`
@@ -353,6 +384,10 @@ let opts = @src.ConnectOptions::new("example.com", 22, "alice")
 | `Client::open_session() -> Channel` | 创建本地 channel（id 自增） |
 | `Client::exec(ch, cmd) -> (String, String) raise SshError` | 执行命令，返回 `(stdout, stderr)` |
 | `Client::shell(ch) -> Unit raise SshError` | 打开 shell 通道（不管理交互式 I/O） |
+| `Client::forward_local_port(local_port, remote_host, remote_port) -> Unit raise SshError` | 本地端口转发（-L），阻塞运行 |
+| `Client::forward_remote_port(remote_port, local_host, local_port) -> Unit raise SshError` | 远程端口转发（-R），阻塞运行 |
+| `Client::forward_socks5(local_port) -> Unit raise SshError` | SOCKS5 动态代理（-D），阻塞运行 |
+| `Client::cancel_remote_forward(address, port) -> Unit raise SshError` | 取消远程端口转发 |
 | `Client::close() -> Unit` | 关闭 TCP 连接 |
 
 ### 5.3 `Channel`
@@ -362,6 +397,8 @@ pub struct Channel {
   id : Int         // 本地 channel id
   peer_id : Int    // 服务端分配的 channel id
   state : ChannelState  // Closed / Opening / Open / ExecPending / EofReceived / Closing / Done
+  channel_type : ChannelType  // Session / DirectTcpip(host, port) / ForwardedTcpip(host, port)
+  data_sink : DataSink        // Buffer / Socket(Tcp)
   // ...
 }
 
@@ -373,6 +410,11 @@ pub fn Channel::exit_status(self) -> Int?
 ```
 
 通道底层消息：OPEN / OPEN_CONFIRMATION / OPEN_FAILURE / WINDOW_ADJUST / DATA / EXTENDED_DATA / EOF / CLOSE / REQUEST（含 `exit-status` / `exit-signal` / `exec` / `shell` / `pty-req`）。
+
+通道类型：
+- `Session` — exec / shell / subsystem
+- `DirectTcpip(host, port)` — 本地转发（-L），客户端发起
+- `ForwardedTcpip(host, port)` — 远程转发（-R），服务端发起
 
 ### 5.4 `SftpClient`
 
@@ -455,28 +497,28 @@ moon coverage analyze > uncovered.log
 |------|------|------|
 | **v0.1** | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
 | **v0.2** | SFTP 协议 | ✅ 已发布 |
-| **v0.3** | shell 交互式 I/O（stdin 转发）/ pty-req 对接 / 端口转发 | 🚧 进行中 |
-| **v0.4** | 文档补全 + CI 矩阵（Linux/macOS/Windows） | 📋 待开发 |
+| **v0.3** | 端口转发（local/remote/SOCKS5）/ shell 交互 | ✅ 已发布 |
+| **v0.4** | shell 交互式 I/O / pty-req 对接 / 文档补全 | 📋 待开发 |
 
 **进展：**
 - [ ] shell 交互（stdin/stdout 转发）
 - [ ] `Client::exec_pty()` 高层封装（`build_channel_request_pty` 已就绪）
-- [ ] 端口转发（local/remote forwarding）
 
 ## 8. 跨平台注意
 
 | 平台 | 编译 | 运行 | 说明 |
 |------|------|------|------|
 | Linux glibc | ✅ | ✅ | 完全支持 |
-| macOS | ✅ | ✅ | 完全支持 |
 | Windows MinGW (Winsock2) | ✅ | ✅ | 完全支持 |
+| macOS | - | - | 待测试验证 |
 
 ## 9. 引用
 
 - [RFC 4251](https://tools.ietf.org/html/rfc4251) — SSH Protocol Architecture
 - [RFC 4252](https://tools.ietf.org/html/rfc4252) — SSH Authentication Protocol
 - [RFC 4253](https://tools.ietf.org/html/rfc4253) — SSH Transport Layer Protocol
-- [RFC 4254](https://tools.ietf.org/html/rfc4254) — SSH Connection Protocol
+- [RFC 4254](https://tools.ietf.org/html/rfc4254) — SSH Connection Protocol（含 TCP/IP Forwarding §7）
+- [RFC 1928](https://tools.ietf.org/html/rfc1928) — SOCKS Protocol Version 5
 - [RFC 4344](https://tools.ietf.org/html/rfc4344) — SSH Transport Layer Encryption Modes
 - [RFC 5656](https://tools.ietf.org/html/rfc5656) — SSH ECC Algorithm Integration
 - [RFC 6668](https://tools.ietf.org/html/rfc6668) — SHA-2 Data Integrity Verification for SSH

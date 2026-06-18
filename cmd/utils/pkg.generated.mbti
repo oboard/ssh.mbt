@@ -4,6 +4,8 @@ package "PaiGack/ssh_client/cmd/utils"
 // Values
 pub fn get_argv() -> Array[String]
 
+pub fn parse_forward_arg(String) -> (Int, String, Int)
+
 pub fn parse_int(String) -> Int
 
 pub fn split_user_host(String) -> (String, String)
