@@ -439,3 +439,171 @@ test "take_stdout_clears_buffer" {
   let s2 = ch.take_stdout()
   inspect(s2, content="")
 }
+
+// ============== Channel type and data sink ==============
+
+///|
+test "channel/new_has_session_type" {
+  let ch = Channel::new(1)
+  match ch.channel_type {
+    Session => ()
+    _ => fail("expected Session type")
+  }
+}
+
+///|
+test "channel/new_has_buffer_sink" {
+  let ch = Channel::new(1)
+  match ch.data_sink {
+    Buffer => ()
+    Socket(_) => fail("expected Buffer sink")
+  }
+}
+
+// ============== build_channel_open_direct_tcpip ==============
+
+///|
+test "build_channel_open_direct_tcpip/frame" {
+  let buf = build_channel_open_direct_tcpip(
+    5, 1024 * 1024, 32 * 1024, "example.com", 80, "127.0.0.1", 12345,
+  )
+  let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
+  inspect(msg.to_int(), content="90") // MSG_CHANNEL_OPEN
+  let r = Reader::new(body)
+  let ctype = r.read_string_as_str()
+  inspect(ctype, content="direct-tcpip")
+  inspect(r.read_uint32(), content="5") // sender_channel
+  inspect(r.read_uint32(), content="1048576") // initial_window
+  inspect(r.read_uint32(), content="32768") // max_packet
+  let host = r.read_string_as_str()
+  inspect(host, content="example.com")
+  inspect(r.read_uint32(), content="80") // port
+  let orig_ip = r.read_string_as_str()
+  inspect(orig_ip, content="127.0.0.1")
+  inspect(r.read_uint32(), content="12345") // originator_port
+  inspect(r.remaining(), content="0")
+}
+
+// ============== build_channel_open_confirmation ==============
+
+///|
+test "build_channel_open_confirmation/frame" {
+  let buf = build_channel_open_confirmation(10, 20, 1024 * 1024, 32 * 1024)
+  let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
+  inspect(msg.to_int(), content="91") // MSG_CHANNEL_OPEN_CONFIRMATION
+  let r = Reader::new(body)
+  inspect(r.read_uint32(), content="10") // recipient_channel
+  inspect(r.read_uint32(), content="20") // sender_channel
+  inspect(r.read_uint32(), content="1048576") // initial_window
+  inspect(r.read_uint32(), content="32768") // max_packet
+  inspect(r.remaining(), content="0")
+}
+
+// ============== build_channel_open_failure ==============
+
+///|
+test "build_channel_open_failure/frame" {
+  let buf = build_channel_open_failure(5, 2, "connect failed", "en")
+  let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
+  inspect(msg.to_int(), content="92") // MSG_CHANNEL_OPEN_FAILURE
+  let r = Reader::new(body)
+  inspect(r.read_uint32(), content="5") // recipient_channel
+  inspect(r.read_uint32(), content="2") // reason_code
+  let desc = r.read_string_as_str()
+  inspect(desc, content="connect failed")
+  let lang = r.read_string_as_str()
+  inspect(lang, content="en")
+  inspect(r.remaining(), content="0")
+}
+
+// ============== build_global_request_tcpip_forward ==============
+
+///|
+test "build_global_request_tcpip_forward/frame" {
+  let buf = build_global_request_tcpip_forward("0.0.0.0", 8080)
+  let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
+  inspect(msg.to_int(), content="80") // MSG_GLOBAL_REQUEST
+  let r = Reader::new(body)
+  let req = r.read_string_as_str()
+  inspect(req, content="tcpip-forward")
+  let want = r.read_byte()
+  inspect(want.to_int(), content="1") // want_reply
+  let addr = r.read_string_as_str()
+  inspect(addr, content="0.0.0.0")
+  inspect(r.read_uint32(), content="8080")
+  inspect(r.remaining(), content="0")
+}
+
+// ============== build_global_request_cancel_tcpip_forward ==============
+
+///|
+test "build_global_request_cancel_tcpip_forward/frame" {
+  let buf = build_global_request_cancel_tcpip_forward("0.0.0.0", 8080)
+  let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
+  inspect(msg.to_int(), content="80") // MSG_GLOBAL_REQUEST
+  let r = Reader::new(body)
+  let req = r.read_string_as_str()
+  inspect(req, content="cancel-tcpip-forward")
+  let want = r.read_byte()
+  inspect(want.to_int(), content="1")
+  let addr = r.read_string_as_str()
+  inspect(addr, content="0.0.0.0")
+  inspect(r.read_uint32(), content="8080")
+  inspect(r.remaining(), content="0")
+}
+
+// ============== parse_inbound_forwarded_tcpip ==============
+
+///|
+test "parse_inbound_forwarded_tcpip/roundtrip" {
+  // 构建一个 forwarded-tcpip 入站消息的 body 部分
+  let w = Writer::new()
+  w.write_uint32(42) // sender_channel
+  w.write_uint32(1024 * 1024) // initial_window
+  w.write_uint32(32 * 1024) // max_packet
+  w.write_string_from_str("0.0.0.0") // address
+  w.write_uint32(9090) // port
+  w.write_string_from_str("192.168.1.1") // originator_ip
+  w.write_uint32(54321) // originator_port
+  let r = Reader::new(w.to_bytes())
+  let (sender, win, maxpkt, addr, port, oip, oport) =
+    parse_inbound_forwarded_tcpip(r) catch { _ => (0, 0, 0, "", 0, "", 0) }
+  inspect(sender, content="42")
+  inspect(win, content="1048576")
+  inspect(maxpkt, content="32768")
+  inspect(addr, content="0.0.0.0")
+  inspect(port, content="9090")
+  inspect(oip, content="192.168.1.1")
+  inspect(oport, content="54321")
+}
+
+// ============== handle_inbound forwarded-tcpip ==============
+
+///|
+test "handle_inbound/forwarded_tcpip_opens_channel" {
+  // 构建 CHANNEL_OPEN(90) + "forwarded-tcpip" + fields
+  let w = Writer::new()
+  w.write_byte(0x5a) // MSG_CHANNEL_OPEN
+  w.write_string_from_str("forwarded-tcpip")
+  w.write_uint32(7) // sender_channel
+  w.write_uint32(1024 * 1024)
+  w.write_uint32(32 * 1024)
+  w.write_string_from_str("0.0.0.0")
+  w.write_uint32(8080)
+  w.write_string_from_str("10.0.0.1")
+  w.write_uint32(12345)
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  // 通道应处于 Open 状态，peer_id 设为 sender_channel
+  inspect(ch.is_open(), content="true")
+  inspect(ch.peer_id(), content="7")
+}
+
+// ============== MSG constants ==============
+
+///|
+test "msg_constants/correct_values" {
+  inspect(MSG_GLOBAL_REQUEST.to_int(), content="80")
+  inspect(MSG_REQUEST_SUCCESS.to_int(), content="81")
+  inspect(MSG_REQUEST_FAILURE.to_int(), content="82")
+}

@@ -57,6 +57,30 @@ extern "C" fn socket_set_nodelay(handle : Int) -> Int = "socket_set_nodelay"
 extern "C" fn moonbit_set_moonssh_debug(val : Int) -> Unit = "moonbit_set_moonssh_debug"
 
 ///|
+/// 绑定端口并开始监听。
+extern "C" fn socket_bind_listen(
+  handle : Int,
+  port : Int,
+  backlog : Int,
+) -> Int = "socket_bind_listen"
+
+///|
+/// 接受一个入站 TCP 连接，返回新 socket 句柄。
+extern "C" fn socket_accept(handle : Int) -> Int = "socket_accept"
+
+///|
+/// 非阻塞检查是否有入站连接等待。
+extern "C" fn socket_poll_accept(handle : Int) -> Int = "socket_poll_accept"
+
+///|
+/// 设置 socket 为非阻塞模式。
+extern "C" fn socket_set_nonblocking(handle : Int) -> Int = "socket_set_nonblocking"
+
+///|
+/// 非阻塞检查 socket 是否有数据可读。
+extern "C" fn socket_poll_readable(handle : Int) -> Int = "socket_poll_readable"
+
+///|
 /// 启用或禁用 C 层调试输出。
 pub fn set_debug(enabled : Bool) -> Unit {
   moonbit_set_moonssh_debug(if enabled { 1 } else { 0 })
@@ -212,6 +236,65 @@ pub fn Tcp::read_until_newline(self : Tcp) -> Bytes raise {
 /// 关闭连接。
 pub fn Tcp::close(self : Tcp) -> Unit {
   socket_close(self.handle)
+}
+
+///|
+/// 创建一个 TCP 监听器，绑定到指定端口并开始监听。
+/// backlog 控制等待队列长度（默认 128）。
+pub fn Tcp::bind_listen(port : Int, backlog~ : Int = 128) -> Tcp raise {
+  let init_result = winsock_init()
+  if init_result != 0 {
+    raise IoError("Failed to initialize socket: code \{init_result}")
+  }
+  let handle = socket_create()
+  if handle < 0 {
+    raise IoError("Failed to create socket")
+  }
+  let rc = socket_bind_listen(handle, port, backlog)
+  if rc != 0 {
+    socket_close(handle)
+    raise IoError("Failed to bind/listen on port \{port}")
+  }
+  { handle, host: "0.0.0.0", port }
+}
+
+///|
+/// 接受一个入站 TCP 连接。阻塞直到有连接到达。
+pub fn Tcp::accept(self : Tcp) -> Tcp raise {
+  let client_handle = socket_accept(self.handle)
+  if client_handle < 0 {
+    raise IoError("Failed to accept connection")
+  }
+  let _ = socket_set_nodelay(client_handle)
+  { handle: client_handle, host: "", port: 0 }
+}
+
+///|
+/// 非阻塞检查是否有入站连接等待。
+pub fn Tcp::has_pending_connection(self : Tcp) -> Bool {
+  socket_poll_accept(self.handle) > 0
+}
+
+///|
+/// 设置 socket 为非阻塞模式。
+pub fn Tcp::set_nonblocking(self : Tcp) -> Unit raise {
+  let rc = socket_set_nonblocking(self.handle)
+  if rc != 0 {
+    raise IoError("Failed to set non-blocking mode")
+  }
+}
+
+///|
+/// 非阻塞检查是否有数据可读。
+pub fn Tcp::has_data(self : Tcp) -> Bool {
+  socket_poll_readable(self.handle) > 0
+}
+
+///|
+/// 接收数据到缓冲区。返回实际读取的字节数，0 表示连接关闭，负数表示错误。
+/// 用于非阻塞 socket 上的数据中继。
+pub fn Tcp::recv(self : Tcp, buffer : Bytes, offset : Int, size : Int) -> Int {
+  socket_recv(self.handle, buffer, offset, size)
 }
 
 ///|

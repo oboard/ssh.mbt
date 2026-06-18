@@ -180,3 +180,29 @@ test "get_argv/tokenizes_env_value" {
   // 测试结束后清理，避免影响其它测试
   @env.set_env_var("MOONBIT_CLI_ARGS", "")
 }
+
+// ============== parse_forward_arg ==============
+
+///|
+test "parse_forward_arg/basic" {
+  let (lp, rh, rp) = parse_forward_arg("8080:example.com:80")
+  inspect(lp, content="8080")
+  inspect(rh, content="example.com")
+  inspect(rp, content="80")
+}
+
+///|
+test "parse_forward_arg/localhost" {
+  let (lp, rh, rp) = parse_forward_arg("9090:localhost:3000")
+  inspect(lp, content="9090")
+  inspect(rh, content="localhost")
+  inspect(rp, content="3000")
+}
+
+///|
+test "parse_forward_arg/ip_address" {
+  let (lp, rh, rp) = parse_forward_arg("1080:192.168.1.1:22")
+  inspect(lp, content="1080")
+  inspect(rh, content="192.168.1.1")
+  inspect(rp, content="22")
+}

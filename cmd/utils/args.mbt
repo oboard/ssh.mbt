@@ -87,6 +87,20 @@ pub fn split_user_host(s : String) -> (String, String) {
 }
 
 ///|
+/// 解析端口转发参数，格式: `local_port:host:port`。
+/// 返回 (local_port, remote_host, remote_port)。
+pub fn parse_forward_arg(s : String) -> (Int, String, Int) {
+  let arr = Array::from_iter(s.split(":"))
+  if arr.length() < 3 {
+    abort("invalid forward format, expected local_port:host:port")
+  }
+  let local_port = parse_int(arr[0].to_owned())
+  let remote_host = arr[1].to_owned()
+  let remote_port = parse_int(arr[2].to_owned())
+  (local_port, remote_host, remote_port)
+}
+
+///|
 pub fn parse_int(s : String) -> Int {
   let arr = s.to_array()
   let mut n = 0

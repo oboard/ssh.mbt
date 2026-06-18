@@ -1,0 +1,10 @@
+import {
+  "moonbitlang/core/env",
+  "PaiGack/ssh_client/cmd/utils",
+  "PaiGack/ssh_client/src",
+}
+
+options(
+  is_main: true,
+  supported_targets: "+native",
+)

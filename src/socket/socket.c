@@ -251,6 +251,83 @@ int socket_set_nodelay(int handle) {
     return p_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 }
 
+/*
+ * Bind to a port and start listening for connections.
+ * handle: socket handle from socket_create()
+ * port: port number to listen on
+ * backlog: listen backlog queue length
+ * Returns: 0 on success, -1 on error
+ */
+int socket_bind_listen(int handle, int port, int backlog) {
+    if (!p_setsockopt && load_winsock() != 0) {
+        return -1;
+    }
+    int opt = 1;
+    p_setsockopt((SOCKET)handle, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = socket_htons((uint16_t)port);
+
+    if (bind((SOCKET)handle, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR)
+        return -1;
+    if (listen((SOCKET)handle, backlog) == SOCKET_ERROR)
+        return -1;
+    return 0;
+}
+
+/*
+ * Accept an incoming connection on a listening socket.
+ * handle: listening socket handle
+ * Returns: new socket handle for the accepted connection, -1 on error
+ */
+int socket_accept(int handle) {
+    struct sockaddr_in addr;
+    int addrlen = sizeof(addr);
+    SOCKET client = accept((SOCKET)handle, (struct sockaddr *)&addr, &addrlen);
+    if (client == INVALID_SOCKET) {
+        return -1;
+    }
+    return (int)client;
+}
+
+/*
+ * Non-blocking check for incoming connections.
+ * handle: listening socket handle
+ * Returns: 1 if connection pending, 0 if none, -1 on error
+ */
+int socket_poll_accept(int handle) {
+    fd_set fds;
+    struct timeval tv = {0, 0}; // non-blocking
+    FD_ZERO(&fds);
+    FD_SET((SOCKET)handle, &fds);
+    return select(0, &fds, NULL, NULL, &tv);
+}
+
+/*
+ * Set socket to non-blocking mode (Windows uses ioctlsocket).
+ * Returns: 0 on success, -1 on error
+ */
+int socket_set_nonblocking(int handle) {
+    unsigned long mode = 1; // 1 = non-blocking
+    return ioctlsocket((SOCKET)handle, FIONBIO, &mode);
+}
+
+/*
+ * Non-blocking check if socket has data available for reading.
+ * handle: socket handle
+ * Returns: 1 if data available, 0 if none, -1 on error
+ */
+int socket_poll_readable(int handle) {
+    fd_set fds;
+    struct timeval tv = {0, 0}; // non-blocking
+    FD_ZERO(&fds);
+    FD_SET((SOCKET)handle, &fds);
+    return select(0, &fds, NULL, NULL, &tv);
+}
+
 #else
 // Unix/Linux implementation placeholder
 #include <sys/socket.h>
@@ -259,7 +336,9 @@ int socket_set_nodelay(int handle) {
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
+#include <sys/select.h>
 
 static int send_all(int sock, const char *buffer, int data_len) {
     int sent = 0;
@@ -399,6 +478,78 @@ void socket_close(int handle) {
 int socket_set_nodelay(int handle) {
     int flag = 1;
     return setsockopt(handle, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+}
+
+/*
+ * Bind to a port and start listening for connections.
+ * handle: socket handle from socket_create()
+ * port: port number to listen on
+ * backlog: listen backlog queue length
+ * Returns: 0 on success, -1 on error
+ */
+int socket_bind_listen(int handle, int port, int backlog) {
+    int opt = 1;
+    setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons((uint16_t)port);
+
+    if (bind(handle, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        return -1;
+    if (listen(handle, backlog) < 0)
+        return -1;
+    return 0;
+}
+
+/*
+ * Accept an incoming connection on a listening socket.
+ * handle: listening socket handle
+ * Returns: new socket handle for the accepted connection, -1 on error
+ */
+int socket_accept(int handle) {
+    struct sockaddr_in addr;
+    socklen_t addrlen = sizeof(addr);
+    int client = accept(handle, (struct sockaddr *)&addr, &addrlen);
+    return client;  // -1 on error
+}
+
+/*
+ * Non-blocking check for incoming connections.
+ * handle: listening socket handle
+ * Returns: 1 if connection pending, 0 if none, -1 on error
+ */
+int socket_poll_accept(int handle) {
+    fd_set fds;
+    struct timeval tv = {0, 0}; // non-blocking
+    FD_ZERO(&fds);
+    FD_SET(handle, &fds);
+    return select(handle + 1, &fds, NULL, NULL, &tv);
+}
+
+/*
+ * Set socket to non-blocking mode.
+ * Returns: 0 on success, -1 on error
+ */
+int socket_set_nonblocking(int handle) {
+    int flags = fcntl(handle, F_GETFL, 0);
+    if (flags < 0) return -1;
+    return fcntl(handle, F_SETFL, flags | O_NONBLOCK);
+}
+
+/*
+ * Non-blocking check if socket has data available for reading.
+ * handle: socket handle
+ * Returns: 1 if data available, 0 if none, -1 on error
+ */
+int socket_poll_readable(int handle) {
+    fd_set fds;
+    struct timeval tv = {0, 0}; // non-blocking
+    FD_ZERO(&fds);
+    FD_SET(handle, &fds);
+    return select(handle + 1, &fds, NULL, NULL, &tv);
 }
 
 #endif

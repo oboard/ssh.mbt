@@ -48,6 +48,18 @@ pub const MSG_CHANNEL_SUCCESS : Byte = b'\x63' // 99
 /// SSH 消息号：CHANNEL_FAILURE（100），请求失败。
 pub const MSG_CHANNEL_FAILURE : Byte = b'\x64' // 100
 
+///|
+/// SSH 消息号：GLOBAL_REQUEST（80），全局请求（如 tcpip-forward）。
+pub const MSG_GLOBAL_REQUEST : Byte = b'\x50' // 80
+
+///|
+/// SSH 消息号：REQUEST_SUCCESS（81），全局请求成功。
+pub const MSG_REQUEST_SUCCESS : Byte = b'\x51' // 81
+
+///|
+/// SSH 消息号：REQUEST_FAILURE（82），全局请求失败。
+pub const MSG_REQUEST_FAILURE : Byte = b'\x52' // 82
+
 // ============== Channel ==============
 
 ///|
@@ -65,6 +77,10 @@ pub struct Channel {
   stderr_buf : Array[Byte]
   mut exit_status : Int?
   mut exit_signal : String?
+  /// 通道类型（session / direct-tcpip / forwarded-tcpip）
+  mut channel_type : ChannelType
+  /// 数据去向（缓冲区或直连 socket）
+  mut data_sink : DataSink
 }
 
 ///|
@@ -79,6 +95,21 @@ pub enum ChannelState {
   Closing
   Done
 } derive(Eq, Debug)
+
+///|
+/// 通道类型。
+pub enum ChannelType {
+  Session
+  DirectTcpip(String, Int)
+  ForwardedTcpip(String, Int)
+} derive(Eq, Debug)
+
+///|
+/// 通道数据处理方式。
+pub enum DataSink {
+  Buffer
+  Socket(@socket.Tcp)
+}
 
 ///|
 /// 创建本地通道。
@@ -98,6 +129,8 @@ pub fn Channel::new(local_id : Int) -> Channel {
     stderr_buf: [],
     exit_status: None,
     exit_signal: None,
+    channel_type: Session,
+    data_sink: Buffer,
   }
 }
 
@@ -256,6 +289,110 @@ pub fn build_channel_window_adjust(
   w.to_bytes()
 }
 
+///|
+/// 构建 direct-tcpip 通道打开消息（本地转发，RFC 4254 §7.2）。
+pub fn build_channel_open_direct_tcpip(
+  sender_channel : Int,
+  initial_window : Int,
+  max_packet : Int,
+  host_to_connect : String,
+  port_to_connect : Int,
+  originator_ip : String,
+  originator_port : Int,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_CHANNEL_OPEN)
+  w.write_string_from_str("direct-tcpip")
+  w.write_uint32(sender_channel)
+  w.write_uint32(initial_window)
+  w.write_uint32(max_packet)
+  w.write_string_from_str(host_to_connect)
+  w.write_uint32(port_to_connect)
+  w.write_string_from_str(originator_ip)
+  w.write_uint32(originator_port)
+  w.to_bytes()
+}
+
+///|
+/// 构建通道打开确认消息（接受入站通道，RFC 4254 §5.1）。
+pub fn build_channel_open_confirmation(
+  recipient_channel : Int,
+  sender_channel : Int,
+  initial_window : Int,
+  max_packet : Int,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_CHANNEL_OPEN_CONFIRMATION)
+  w.write_uint32(recipient_channel)
+  w.write_uint32(sender_channel)
+  w.write_uint32(initial_window)
+  w.write_uint32(max_packet)
+  w.to_bytes()
+}
+
+///|
+/// 构建通道打开失败消息（拒绝入站通道，RFC 4254 §5.1）。
+pub fn build_channel_open_failure(
+  recipient_channel : Int,
+  reason_code : Int,
+  description : String,
+  language : String,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_CHANNEL_OPEN_FAILURE)
+  w.write_uint32(recipient_channel)
+  w.write_uint32(reason_code)
+  w.write_string_from_str(description)
+  w.write_string_from_str(language)
+  w.to_bytes()
+}
+
+///|
+/// 构建 tcpip-forward 全局请求（远程转发注册，RFC 4254 §7.1）。
+pub fn build_global_request_tcpip_forward(
+  address : String,
+  port : Int,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_GLOBAL_REQUEST)
+  w.write_string_from_str("tcpip-forward")
+  w.write_byte(1) // want_reply = true
+  w.write_string_from_str(address)
+  w.write_uint32(port)
+  w.to_bytes()
+}
+
+///|
+/// 构建 cancel-tcpip-forward 全局请求（取消远程转发，RFC 4254 §7.1）。
+pub fn build_global_request_cancel_tcpip_forward(
+  address : String,
+  port : Int,
+) -> Bytes {
+  let w = Writer::new()
+  w.write_byte(MSG_GLOBAL_REQUEST)
+  w.write_string_from_str("cancel-tcpip-forward")
+  w.write_byte(1) // want_reply = true
+  w.write_string_from_str(address)
+  w.write_uint32(port)
+  w.to_bytes()
+}
+
+///|
+/// 解析入站 forwarded-tcpip 通道打开消息（RFC 4254 §7.2）。
+/// 返回 (sender_channel, initial_window, max_packet, address, port, originator_ip, originator_port)。
+pub fn parse_inbound_forwarded_tcpip(
+  r : Reader,
+) -> (Int, Int, Int, String, Int, String, Int) raise SshError {
+  let sender_channel = r.read_uint32()
+  let initial_window = r.read_uint32()
+  let max_packet = r.read_uint32()
+  let address = r.read_string_as_str()
+  let port = r.read_uint32()
+  let originator_ip = r.read_string_as_str()
+  let originator_port = r.read_uint32()
+  (sender_channel, initial_window, max_packet, address, port, originator_ip, originator_port)
+}
+
 // ============== Inbound handler ==============
 
 ///|
@@ -321,8 +458,17 @@ pub fn Channel::handle_inbound(
     MSG_CHANNEL_DATA => {
       let _sender = r.read_uint32()
       let data = r.read_string()
-      for b in data {
-        self.stdout_buf.push(b)
+      match self.data_sink {
+        Buffer => {
+          for b in data {
+            self.stdout_buf.push(b)
+          }
+        }
+        Socket(sock) => {
+          sock.write_bytes(data) catch {
+            e => debug("* channel data → socket write failed: \{e}")
+          }
+        }
       }
       [build_channel_window_adjust(self.peer_id, self.local_max_packet)]
     }
@@ -351,9 +497,30 @@ pub fn Channel::handle_inbound(
       self.state = Done
       []
     }
+    // SSH_MSG_CHANNEL_OPEN(90): 处理入站通道（如 forwarded-tcpip）
+    MSG_CHANNEL_OPEN => {
+      let ch_type = r.read_string_as_str()
+      match ch_type {
+        "forwarded-tcpip" => {
+          let (sender_ch, _win, _max_pkt, _addr, _port, _orig_ip, _orig_port) =
+            parse_inbound_forwarded_tcpip(r)
+          // 通知上层需要创建新 Channel 并连接本地目标
+          // 通过设置 peer_id 和状态让 Client 知道有入站通道
+          self.peer_id = sender_ch
+          self.state = Open
+          debug("* INBOUND: forwarded-tcpip from server, sender_ch=\{sender_ch}")
+          []
+        }
+        _ => {
+          // 未知通道类型, 发送 OPEN_FAILURE
+          let sender_ch = r.read_uint32()
+          [build_channel_open_failure(sender_ch, 3, "unknown channel type", "")]
+        }
+      }
+    }
     // SSH_MSG_GLOBAL_REQUEST(80), REQUEST_SUCCESS(81), REQUEST_FAILURE(82)
     // SSH_MSG_IGNORE(2), DEBUG(4), EXT_INFO(7) — skip
-    b'\x50' => {
+    MSG_GLOBAL_REQUEST => {
       // SSH_MSG_GLOBAL_REQUEST: 解析 want_reply 字段
       let req_name = r.read_string_as_str()
       let want_reply = if !r.eof() { r.read_byte() } else { b'\x00' }
@@ -361,12 +528,12 @@ pub fn Channel::handle_inbound(
         "* GLOBAL_REQUEST: '\{req_name}', want_reply=\{want_reply != b'\x00'}",
       )
       if want_reply != b'\x00' {
-        [b"\x52"] // SSH_MSG_REQUEST_FAILURE
+        [Bytes::make(1, MSG_REQUEST_FAILURE)]
       } else {
         []
       }
     }
-    b'\x51' | b'\x52' | b'\x02' | b'\x04' | b'\x07' => []
+    MSG_REQUEST_SUCCESS | MSG_REQUEST_FAILURE | b'\x02' | b'\x04' | b'\x07' => []
     _ => raise ProtocolError("channel: unexpected msg \{msg.to_int()}")
   }
 }

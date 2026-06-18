@@ -466,6 +466,393 @@ pub fn Client::close(self : Client) -> Unit {
   }
 }
 
+// ============== Port forwarding ==============
+
+///|
+/// 本地端口转发（-L）。在本地监听端口，将连接通过 SSH 中转到远端目标。
+/// 阻塞运行直到连接断开或出错。每次只能处理一个转发连接。
+///
+/// - `local_port`：本地监听端口
+/// - `remote_host`：通过 SSH 连接的目标主机
+/// - `remote_port`：通过 SSH 连接的目标端口
+pub fn Client::forward_local_port(
+  self : Client,
+  local_port : Int,
+  remote_host : String,
+  remote_port : Int,
+) -> Unit raise SshError {
+  let listener = @socket.Tcp::bind_listen(local_port) catch {
+    e => raise IoError("bind local port \{local_port}: \{e}")
+  }
+  debug("* forward_local: listening on 127.0.0.1:\{local_port} → \{remote_host}:\{remote_port}")
+
+  while true {
+    let local_conn = listener.accept() catch {
+      e => {
+        debug("* forward_local: accept error: \{e}")
+        continue
+      }
+    }
+    debug("* forward_local: new connection from client")
+
+    let ch = self.open_direct_tcpip(remote_host, remote_port)
+    self.relay_data(ch, local_conn)
+    debug("* forward_local: connection closed, waiting for next")
+  }
+}
+
+///|
+/// 远程端口转发（-R）。在远端监听端口，将入站连接中转到本地目标。
+/// 阻塞运行直到连接断开或出错。
+///
+/// - `remote_port`：远端监听端口
+/// - `local_host`：本地目标主机
+/// - `local_port`：本地目标端口
+pub fn Client::forward_remote_port(
+  self : Client,
+  remote_port : Int,
+  local_host : String,
+  local_port : Int,
+) -> Unit raise SshError {
+  // 1. 注册远程转发
+  let req = build_global_request_tcpip_forward("0.0.0.0", remote_port)
+  self.write_packet(req)
+
+  // 2. 读取响应
+  let reply = self.read_packet()
+  let r = Reader::new(reply)
+  let msg_type = r.read_byte()
+  match msg_type {
+    MSG_REQUEST_SUCCESS => {
+      let assigned_port = if !r.eof() { r.read_uint32() } else { remote_port }
+      debug("* remote forward registered on port \{assigned_port}")
+    }
+    MSG_REQUEST_FAILURE => {
+      raise RequestDenied("tcpip-forward rejected by server")
+    }
+    _ => raise ProtocolError("unexpected reply to tcpip-forward: \{msg_type.to_int()}")
+  }
+
+  // 3. 事件循环
+  self.remote_forward_loop(local_host, local_port)
+}
+
+///|
+/// 动态端口转发 / SOCKS5 代理（-D）。在本地监听 SOCKS5 端口。
+/// 阻塞运行直到连接断开或出错。
+///
+/// - `local_port`：本地 SOCKS5 监听端口
+pub fn Client::forward_socks5(
+  self : Client,
+  local_port : Int,
+) -> Unit raise SshError {
+  let listener = @socket.Tcp::bind_listen(local_port) catch {
+    e => raise IoError("bind SOCKS5 port \{local_port}: \{e}")
+  }
+  debug("* SOCKS5 proxy listening on 127.0.0.1:\{local_port}")
+
+  while true {
+    let conn = listener.accept() catch {
+      e => {
+        debug("* SOCKS5: accept error: \{e}")
+        continue
+      }
+    }
+    self.handle_socks5_connection(conn)
+  }
+}
+
+///|
+/// 取消远程端口转发。
+pub fn Client::cancel_remote_forward(
+  self : Client,
+  address : String,
+  port : Int,
+) -> Unit raise SshError {
+  let req = build_global_request_cancel_tcpip_forward(address, port)
+  self.write_packet(req)
+
+  let reply = self.read_packet()
+  let msg_type = reply.unsafe_get(0)
+  match msg_type {
+    MSG_REQUEST_SUCCESS => debug("* remote forward cancelled: \{address}:\{port}")
+    MSG_REQUEST_FAILURE => raise RequestDenied("cancel-tcpip-forward rejected")
+    _ => raise ProtocolError("unexpected reply to cancel-tcpip-forward")
+  }
+}
+
+// ============== Forwarding internals ==============
+
+/// 打开 direct-tcpip 通道（本地转发用）。
+fn Client::open_direct_tcpip(
+  self : Client,
+  host : String,
+  port : Int,
+) -> Channel raise SshError {
+  let id = self.next_channel_id
+  self.next_channel_id = self.next_channel_id + 1
+  let ch = Channel::new(id)
+  ch.channel_type = DirectTcpip(host, port)
+
+  let open_msg = build_channel_open_direct_tcpip(
+    id, 1024 * 1024, 32 * 1024,
+    host, port, "127.0.0.1", 0,
+  )
+  self.write_packet(open_msg)
+
+  // 等待确认
+  while true {
+    let payload = self.read_packet()
+    let responses = ch.handle_inbound(payload)
+    for resp in responses {
+      self.write_packet(resp)
+    }
+    if ch.is_open() { break }
+    if ch.state() == Done {
+      raise ProtocolError("direct-tcpip: failed to open")
+    }
+  }
+  ch
+}
+
+/// 双向数据中继：local_socket ↔ SSH channel。
+/// 使用 select 轮询避免阻塞任一方向。
+fn Client::relay_data(
+  self : Client,
+  ch : Channel,
+  local_socket : @socket.Tcp,
+) -> Unit raise SshError {
+  // 设置数据去向为 socket（SSH 通道数据直接写入本地 socket）
+  ch.data_sink = Socket(local_socket)
+
+  // 设置本地 socket 为非阻塞
+  local_socket.set_nonblocking() catch {
+    e => debug("* relay_data: set_nonblocking failed: \{e}")
+  }
+
+  while ch.state() != Done && ch.state() != Closed {
+    // 方向 A: SSH → 本地 socket
+    let payload = self.read_packet_nonblocking()
+    match payload {
+      Some(data) => {
+        let responses = ch.handle_inbound(data)
+        for resp in responses {
+          self.write_packet(resp)
+        }
+        // 检查通道是否收到数据（DataSink::Buffer 模式）
+        if ch.has_stdout() {
+          let out = ch.take_stdout()
+          local_socket.write_bytes(@utf8.encode(out)) catch {
+            _ => break
+          }
+        }
+      }
+      None => ()
+    }
+
+    // 方向 B: 本地 socket → SSH
+    if local_socket.has_data() {
+      let buf = Bytes::new(32 * 1024)
+      let n = local_socket.recv(buf, 0, 32 * 1024)
+      if n > 0 {
+        let view = Bytes::get_view(buf, start=0, end=n)
+        match view {
+          Some(v) => {
+            let data = BytesView::to_owned(v)
+            let msg = build_channel_data(ch.peer_id(), data)
+            self.write_packet(msg) catch { _ => break }
+          }
+          None => break
+        }
+      } else if n == 0 {
+        // 本地连接关闭, 发送 EOF
+        self.write_packet(build_channel_eof(ch.peer_id())) catch { _ => () }
+        break
+      }
+    }
+  }
+
+  // 清理
+  if ch.state() != Done {
+    self.write_packet(build_channel_close(ch.peer_id())) catch { _ => () }
+  }
+  local_socket.close()
+}
+
+/// 远程转发事件循环。
+fn Client::remote_forward_loop(
+  self : Client,
+  local_host : String,
+  local_port : Int,
+) -> Unit raise SshError {
+  while true {
+    let payload = self.read_packet()
+    let msg_type = payload.unsafe_get(0)
+
+    match msg_type {
+      MSG_CHANNEL_OPEN => {
+        let r = Reader::new(payload)
+        let _ = r.read_byte() // msg type
+        let ch_type = r.read_string_as_str()
+        if ch_type == "forwarded-tcpip" {
+          let (sender_ch, _win, _max_pkt, addr, _port, orig_ip, orig_port) =
+            parse_inbound_forwarded_tcpip(r)
+          debug("* remote forward: connection from \{orig_ip}:\{orig_port}")
+
+          // 连接本地目标
+          let local_conn = @socket.Tcp::connect_to_host(local_host, port=local_port) catch {
+            e => {
+              debug("* remote forward: cannot connect to local \{local_host}:\{local_port}: \{e}")
+              let fail_msg = build_channel_open_failure(sender_ch, 2, "connect failed", "en")
+              self.write_packet(fail_msg) catch { _ => () }
+              continue
+            }
+          }
+
+          // 分配本地通道 ID, 发送确认
+          let local_id = self.next_channel_id
+          self.next_channel_id = self.next_channel_id + 1
+          let ch = Channel::new(local_id)
+          ch.channel_type = ForwardedTcpip(addr, _port)
+
+          let confirm = build_channel_open_confirmation(
+            sender_ch, local_id, 1024 * 1024, 32 * 1024,
+          )
+          self.write_packet(confirm) catch { _ => continue }
+
+          // 中继数据
+          self.relay_data(ch, local_conn)
+        } else {
+          // 未知通道类型, 发送 OPEN_FAILURE
+          let sender_ch = r.read_uint32()
+          let fail_msg = build_channel_open_failure(sender_ch, 3, "unsupported channel type", "")
+          self.write_packet(fail_msg) catch { _ => () }
+        }
+      }
+      MSG_CHANNEL_OPEN_CONFIRMATION => {
+        // 可能是其他通道的确认，忽略
+        debug("* remote forward: ignoring channel open confirmation")
+      }
+      MSG_GLOBAL_REQUEST => {
+        // 服务端的全局请求，回复 FAILURE
+        debug("* remote forward: ignoring global request")
+        self.write_packet(Bytes::make(1, MSG_REQUEST_FAILURE)) catch { _ => () }
+      }
+      _ => {
+        debug("* remote forward: ignoring msg \{msg_type.to_int()}")
+      }
+    }
+  }
+}
+
+/// 处理单个 SOCKS5 连接。
+fn Client::handle_socks5_connection(
+  self : Client,
+  conn : @socket.Tcp,
+) -> Unit raise SshError {
+  // SOCKS5 握手 + CONNECT 请求解析
+  let (target_host, target_port) = socks5_handshake(conn) catch {
+    _e => {
+      conn.close()
+      return
+    }
+  }
+
+  debug("* SOCKS5 CONNECT → \{target_host}:\{target_port}")
+
+  // 通过 SSH 打开 direct-tcpip 通道
+  let ch = self.open_direct_tcpip(target_host, target_port) catch {
+    _e => {
+      debug("* SOCKS5: direct-tcpip failed")
+      conn.write_bytes(b"\x05\x01\x00\x01\x00\x00\x00\x00\x00\x00") catch { _ => () }
+      conn.close()
+      return
+    }
+  }
+
+  // 回复成功
+  conn.write_bytes(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00") catch {
+    _ => {
+      conn.close()
+      return
+    }
+  }
+
+  // 双向中继
+  self.relay_data(ch, conn)
+}
+
+/// SOCKS5 握手 + CONNECT 请求解析。返回 (target_host, target_port)。
+fn socks5_handshake(
+  conn : @socket.Tcp,
+) -> (String, Int) raise SshError {
+  // 1. 读取客户端握手
+  let buf = conn.read_exact(2) catch {
+    e => raise IoError("socks5: read handshake: \{e}")
+  }
+  let ver = buf.unsafe_get(0)
+  let nmethods = buf.unsafe_get(1).to_int()
+  if ver != b'\x05' {
+    raise ProtocolError("socks5: unsupported version")
+  }
+  let _methods = conn.read_exact(nmethods) catch {
+    e => raise IoError("socks5: read methods: \{e}")
+  }
+
+  // 2. 回复: 无需认证 (0x00)
+  conn.write_bytes(b"\x05\x00") catch {
+    e => raise IoError("socks5: write auth reply: \{e}")
+  }
+
+  // 3. 读取 CONNECT 请求
+  let header = conn.read_exact(4) catch {
+    e => raise IoError("socks5: read request: \{e}")
+  }
+  let cmd = header.unsafe_get(1)
+  if cmd != b'\x01' {
+    conn.write_bytes(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00") catch { _ => () }
+    raise ProtocolError("socks5: unsupported command")
+  }
+  let atyp = header.unsafe_get(3)
+
+  // 4. 解析目标地址
+  match atyp {
+    b'\x01' => {
+      let addr = conn.read_exact(4) catch {
+        e => raise IoError("socks5: read ipv4: \{e}")
+      }
+      let port_raw = conn.read_exact(2) catch {
+        e => raise IoError("socks5: read port: \{e}")
+      }
+      let ip = "\{addr.unsafe_get(0)}.\{addr.unsafe_get(1)}.\{addr.unsafe_get(2)}.\{addr.unsafe_get(3)}"
+      let p = (port_raw.unsafe_get(0).to_int() << 8) | port_raw.unsafe_get(1).to_int()
+      (ip, p)
+    }
+    b'\x03' => {
+      let len_raw = conn.read_exact(1) catch {
+        e => raise IoError("socks5: read domain len: \{e}")
+      }
+      let domain = conn.read_exact(len_raw.unsafe_get(0).to_int()) catch {
+        e => raise IoError("socks5: read domain: \{e}")
+      }
+      let port_raw = conn.read_exact(2) catch {
+        e => raise IoError("socks5: read port: \{e}")
+      }
+      let host = bytes_to_utf8_string(domain)
+      let p = (port_raw.unsafe_get(0).to_int() << 8) | port_raw.unsafe_get(1).to_int()
+      (host, p)
+    }
+    b'\x04' => {
+      conn.write_bytes(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00") catch { _ => () }
+      raise ProtocolError("socks5: IPv6 not supported")
+    }
+    _ => {
+      conn.write_bytes(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00") catch { _ => () }
+      raise ProtocolError("socks5: unknown address type")
+    }
+  }
+}
+
 // ============== Internal packet I/O ==============
 
 ///|
@@ -493,6 +880,20 @@ fn Client::read_packet(self : Client) -> Bytes raise SshError {
     self.read_encrypted_packet()
   } else {
     self.read_plain_packet()
+  }
+}
+
+///|
+/// 非阻塞读取一个 SSH 包。底层 socket 无数据时返回 None。
+/// 用于端口转发的数据中继循环，避免阻塞某一方向。
+fn Client::read_packet_nonblocking(self : Client) -> Option[Bytes] raise SshError {
+  match self.conn {
+    Connected(conn) => {
+      if !conn.has_data() {
+        return None
+      }
+      Some(self.read_packet())
+    }
   }
 }
 
