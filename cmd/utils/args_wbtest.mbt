@@ -206,3 +206,8 @@ test "parse_forward_arg/ip_address" {
   inspect(rh, content="192.168.1.1")
   inspect(rp, content="22")
 }
+
+///|
+test "panic_parse_forward_arg/none" {
+  let _ = parse_forward_arg("")
+}
