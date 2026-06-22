@@ -241,7 +241,7 @@ pub fn Tcp::close(self : Tcp) -> Unit {
 ///|
 /// 创建一个 TCP 监听器，绑定到指定端口并开始监听。
 /// backlog 控制等待队列长度（默认 128）。
-pub fn Tcp::bind_listen(port : Int, backlog~ : Int = 128) -> Tcp raise {
+pub fn Tcp::bind_listen(port : Int, backlog? : Int = 128) -> Tcp raise {
   let init_result = winsock_init()
   if init_result != 0 {
     raise IoError("Failed to initialize socket: code \{init_result}")

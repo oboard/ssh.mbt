@@ -465,7 +465,13 @@ test "channel/new_has_buffer_sink" {
 ///|
 test "build_channel_open_direct_tcpip/frame" {
   let buf = build_channel_open_direct_tcpip(
-    5, 1024 * 1024, 32 * 1024, "example.com", 80, "127.0.0.1", 12345,
+    5,
+    1024 * 1024,
+    32 * 1024,
+    "example.com",
+    80,
+    "127.0.0.1",
+    12345,
   )
   let (msg, body) = channel_msg_body(buf) catch { _ => (b'\x00', b"") }
   inspect(msg.to_int(), content="90") // MSG_CHANNEL_OPEN
@@ -566,8 +572,11 @@ test "parse_inbound_forwarded_tcpip/roundtrip" {
   w.write_string_from_str("192.168.1.1") // originator_ip
   w.write_uint32(54321) // originator_port
   let r = Reader::new(w.to_bytes())
-  let (sender, win, maxpkt, addr, port, oip, oport) =
-    parse_inbound_forwarded_tcpip(r) catch { _ => (0, 0, 0, "", 0, "", 0) }
+  let (sender, win, maxpkt, addr, port, oip, oport) = parse_inbound_forwarded_tcpip(
+    r,
+  ) catch {
+    _ => (0, 0, 0, "", 0, "", 0)
+  }
   inspect(sender, content="42")
   inspect(win, content="1048576")
   inspect(maxpkt, content="32768")
