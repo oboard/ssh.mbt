@@ -32,18 +32,18 @@ curl http://127.0.0.1:1080
 
 sleep 5
 
-docker exec -it openssh-server_forwarding bash -c "
+docker exec openssh-server_forwarding bash -c "
 sed -i 's/^#\?AllowTcpForwarding.*/AllowTcpForwarding yes/' /config/sshd/sshd_config && \
 sed -i 's/^#\?GatewayPorts.*/GatewayPorts no/' /config/sshd/sshd_config && \
 sed -i 's/^#\?PermitOpen.*/PermitOpen any/' /config/sshd/sshd_config
 "
 
-docker exec -it openssh-server_forwarding pkill sshd
-docker exec -it openssh-server_forwarding cat /config/sshd/sshd_config
+docker exec openssh-server_forwarding pkill sshd
+docker exec openssh-server_forwarding cat /config/sshd/sshd_config
 
 # # 将本地的 1080 端口转发到 ssh 的 8080 端口
 # ssh -v -R 8080:127.0.0.1:1080 admin@127.0.0.1 -p 5022
 
 # # 验证 ssh 的 8080 是否可以访问
-# docker exec -it openssh-server_forwarding curl http://127.0.0.1:8080
+# docker exec openssh-server_forwarding curl http://127.0.0.1:8080
 
