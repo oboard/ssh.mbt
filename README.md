@@ -25,16 +25,16 @@
 | `known_hosts` 解析 | ✅ | 基础解析 + 通配符；HMAC-SHA1 哈希形式（`\|1\|…`）待支持 |
 | SFTP | ✅ | SFTP v3 协议实现（`src/sftp.mbt`）|
 | 远程端口转发 (-R) | ✅ | `Client::forward_remote_port()` — `tcpip-forward` 全局请求 + `forwarded-tcpip` 通道 |
-| 本地端口转发 (-L) | ❌ | `Client::forward_local_port()` — `direct-tcpip` 通道 |
-| SOCKS5 动态转发 (-D) | ❌ | `Client::forward_socks5()` — SOCKS5 代理 |
-| X11 转发 |  | 未实现 |
+| 本地端口转发 (-L) | 待验证 | `Client::forward_local_port()` — `direct-tcpip` 通道 |
+| SOCKS5 动态转发 (-D) | 待验证 | `Client::forward_socks5()` — SOCKS5 代理（IPv4 + 域名）|
+| X11 转发 | 未实现 | - |
 
 ## 2. 架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  cmd/{password,key,sftp}/                               │
-│                       ── CLI 入口（按认证方式分命令）     │
+│  cmd/{password,key,sftp,forwarding,output}/             │
+│                       ── CLI 入口（按认证方式/场景分命令）│
 └────────────────────────┬────────────────────────────────┘
                          │  @src.Client / @src.SftpClient
 ┌────────────────────────▼────────────────────────────────┐
@@ -52,6 +52,7 @@
 │   • Client::forward_local_port  ── 本地转发 (-L)       │
 │   • Client::forward_remote_port ── 远程转发 (-R)       │
 │   • Client::forward_socks5      ── SOCKS5 代理 (-D)    │
+│   • Client::cancel_remote_forward  ── 取消远程转发     │
 │   • Client::close         ── 清理                       │
 └────────────────────────┬────────────────────────────────┘
                          │
@@ -182,18 +183,18 @@ moonbit-ssh-client/
 │       ├── pkey.mbt             RSA/Ed25519/DSA/ECDSA 签名/验证 + 加载 PEM/OpenSSH 私钥
 │       ├── kex.mbt              DH Group14 + BigInt FFI（BN_*）
 │       └── error.mbt            CryptoError
-├── cmd/                         ★ CLI 入口（按认证方式分多个子命令）
-│   ├── output/                  Hello MoonBit 演示
-│   ├── utils/                   CMD args 等工具封装
+├── cmd/                         ★ CLI 入口（按认证方式/场景分多个子命令）
+│   ├── output/                  Hello MoonBit 演示（println "Hello MoonBit!"）
+│   ├── utils/                   CMD args 工具：tokenize / split_user_host / parse_forward_arg / parse_int
 │   ├── password/                密码认证（auth_auto）
-│   ├── key/               Ed25519/RSA/ECDSA 公钥认证
-│   ├── sftp/                    SFTP 文件传输客户端
-│   └── forward/                 端口转发（-L / -R / -D）
+│   ├── key/                     Ed25519/RSA/ECDSA 公钥认证
+│   ├── sftp/                    SFTP 文件传输客户端（ls/get/put/rm/mkdir/rmdir/stat）
+│   └── forwarding/              端口转发（-L / -R / -D）
 ├── docs/
 │   ├── prd_000.md                       设计 PRD
 │   ├── prd_001_ssh-key-types-support-plan.md   密钥类型扩展计划
 │   ├── prd_002_sftp-support-plan.md     SFTP 实现计划
-│   ├── prd_002_port-forwarding-plan.md         端口转发设计文档
+│   ├── prd_003_port-forwarding-plan.md         端口转发设计文档
 │   └── crypto-replacement-plan.md       OpenSSL 替换为 MoonBit 原生实现的方案
 └── scripts/
     └── ssh-server/              本地 docker sshd 脚本（每个认证方式独立）
@@ -201,9 +202,9 @@ moonbit-ssh-client/
         ├── .gitignore           忽略本地生成的密钥对
         ├── password.sh          密码认证 sshd（端口 1022→2222）
         ├── key-ed25519.sh       生成 ed25519 密钥 + 公钥认证 sshd（端口 2022→2222）
-        ├── key-rsa.sh           生成 rsa 密钥 + 公钥认证 sshd（端口 3022→2222）
+        ├── key-rsa.sh           生成 4096 位 rsa 密钥 + 公钥认证 sshd（端口 3022→2222）
         ├── key-ecdsa.sh         生成 ecdsa 密钥 + 公钥认证 sshd（端口 4022→2222）
-        └── forwarding.sh        密码认证 sshd（端口 5022→2222）+ 端口转发
+        └── forwarding.sh        密码认证 sshd（端口 5022→2222，AllowTcpForwarding=yes）+ nginx(1080) 验证目标
 ```
 
 ## 4. 快速开始
@@ -253,11 +254,12 @@ bash scripts/ssh-server/password.sh
 
 ### 4.3 构建与运行
 
-仓库根没有统一 `run.sh`，每个 `cmd/*` 子包自带 `run.sh`，它们做：
-1. `source ../scripts/ssh-server/.env` 注入 `password`
-2. `export MOONBIT_CLI_ARGS="..."`
-3. `moon clean && moon build . --target native`
-4. 执行 `_build/native/debug/build/cmd/<name>/<name>.exe`
+仓库根没有统一 `run.sh`，每个 `cmd/*` 子包自带 `run-*.sh` 脚本（除 `output/` 仅作演示外），它们做：
+1. `source .env` 注入 `MSSH_HOST` / `MSSH_PORT` / `MSSH_USERNAME` / `MSSH_PASSWORD` 等变量
+2. `export MOONBIT_CLI_ARGS="..."`（CLI 参数通过环境变量传入 main，避免对 argv 解析的兼容问题）
+3. `moon clean && moon run . --target native`（一次完成编译 + 运行）
+
+CLI 参数在 main 里通过 `@utils.get_argv()` 从 `MOONBIT_CLI_ARGS` 读取并 tokenize，因此所有命令行参数都集中在一个环境变量里。
 
 #### 4.3.1 密码认证
 
@@ -266,9 +268,9 @@ bash scripts/ssh-server/password.sh
 cd cmd/password
 ./run.sh
 # 内部：
+#   source .env       # 注入 MSSH_HOST=127.0.0.1 MSSH_PORT=1022 MSSH_USERNAME=admin MSSH_PASSWORD=123456
 #   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --exec 'uname -a' --password $MSSH_PASSWORD"
-#   moon build . --target native
-#   ../../_build/native/debug/build/cmd/password/password.exe
+#   moon clean && moon run . --target native
 ```
 
 等价的手动调用：
@@ -276,70 +278,62 @@ cd cmd/password
 ```bash
 export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --exec 'uname -a' --password 123456"
 cd cmd/password
-moon build . --target native
-./_build/native/debug/build/cmd/password/password.exe
+moon run . --target native
 ```
 
 #### 4.3.2 公钥认证（Ed25519 / RSA / ECDSA）
 
+`cmd/key/` 提供三个独立脚本，对应三种密钥类型：
+
 ```bash
-# 前置：bash scripts/ssh-server/key-ed25519.sh  # 或 key-rsa.sh / key-ecdsa.sh
+# 前置：bash scripts/ssh-server/key-ed25519.sh   # 或 key-rsa.sh / key-ecdsa.sh
 cd cmd/key
-./run-ed25519.sh
-# 内部使用：--key /workspace/scripts/ssh-server/id_ed25519
-#          （路径是 docker 容器内的位置；如果你直接在本地运行，请改为宿主机路径）
+./run-ed25519.sh     # 默认 --key ${workspace}/scripts/ssh-server/id_ed25519
+./run-rsa.sh         # 默认 --key ${workspace}/scripts/ssh-server/id_rsa
+./run-ecdsa.sh       # 默认 --key ${workspace}/scripts/ssh-server/id_ecdsa
+# 内部：
+#   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --exec 'uname -a' --key ${workspace}/scripts/ssh-server/id_<alg>"
+#   moon clean && moon run . --target native
 ```
 
-> **路径注意：** `run.sh` 默认 `--key` 指向 docker 容器内路径 `/workspace/scripts/ssh-server/id_*`；如果 sshd 跑在本地而非 docker，请把路径改成宿主机上的实际位置。
+`cmd/key/.env` 注入 `workspace`（docker 容器内的工作目录）。如果 sshd 直接跑在本地，请把 `${workspace}/scripts/ssh-server/id_*` 改成宿主机路径。
 
 #### 4.3.3 SFTP 文件传输
+
+`cmd/sftp/run.sh` 是一个端到端冒烟脚本：依次执行 ls / → mkdir → ls → put → ls → get → stat → rm → rmdir → ls。脚本先 `moon build` 一次，再多次切换 `MOONBIT_CLI_ARGS` 调用同一个二进制：
 
 ```bash
 # 前置：bash scripts/ssh-server/password.sh
 cd cmd/sftp
-
-# 列出目录
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command ls /"
-../../_build/native/debug/build/cmd/sftp/sftp.exe
-
-# 下载文件
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command get /tmp/file.txt"
-../../_build/native/debug/build/cmd/sftp/sftp.exe
-
-# 上传文件
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command put local.txt /tmp/remote.txt"
-../../_build/native/debug/build/cmd/sftp/sftp.exe
-
-# 查看文件属性
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command stat /tmp/file.txt"
-../../_build/native/debug/build/cmd/sftp/sftp.exe
-
-# 创建/删除目录
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command mkdir /tmp/newdir"
-../../_build/native/debug/build/cmd/sftp/sftp.exe
+./run.sh
+# 内部：
+#   moon clean && moon build . --target native
+#   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --password $MSSH_PASSWORD --command ls /"
+#   ../../_build/native/debug/build/cmd/sftp/sftp.exe
+#   …（依次 mkdir / ls / put / ls / get / stat / rm / rmdir / ls）
 ```
+
+支持的子命令：`ls <path>` / `get <remote>` / `put <local> <remote>` / `rm <path>` / `mkdir <path>` / `rmdir <path>` / `stat <path>`。
+
+> **注意：** 当前 `cmd_get` 把内容以 hex 预览打印到 stdout，并未真正写入本地文件；`cmd_put` 上传的是一个固定的演示字符串（`Hello from MoonSSH SFTP client!`）。
 
 #### 4.3.4 端口转发
 
-端口转发通过统一的 `cmd/forward/` 入口，使用 `-L` / `-R` / `-D` 参数区分模式：
+端口转发通过 `cmd/forwarding/` 入口，使用 `-L` / `-R` / `-D` 参数区分模式：
 
 ```bash
-# 前置：bash scripts/ssh-server/password.sh
-cd cmd/forward
+# 前置：bash scripts/ssh-server/forwarding.sh
+#   （启动 sshd 5022→2222，并把 1080 端口绑定到 nginx 作为目标；
+#    同时配置 AllowTcpForwarding=yes / GatewayPorts=no / PermitOpen=any）
+cd cmd/forwarding
 
-# 远程转发 (-R)：远端 9090 → 通过 SSH → 本地 localhost:3000
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -R 9090:localhost:3000 --password 123456"
-../../_build/native/debug/build/cmd/forward/forward.exe
-
-# 本地转发 (-L)：本地 8080 → 通过 SSH → 远端 localhost:80
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -L 8080:localhost:80 --password 123456"
-../../_build/native/debug/build/cmd/forward/forward.exe
-# 然后访问 http://127.0.0.1:8080
-
-# SOCKS5 代理 (-D)：本地 1080 作为 SOCKS5 代理
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -D 1080 --password 123456"
-../../_build/native/debug/build/cmd/forward/forward.exe
-# 然后 curl --socks5 127.0.0.1:1080 http://example.com
+# 远程转发 (-R)：远端 8080 → 通过 SSH → 本地 localhost:1080 (nginx)
+./run.sh
+# 内部默认：
+#   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -R 8080:localhost:1080 --password $MSSH_PASSWORD"
+#   moon clean && moon run . --target native
+# 验证（在 sshd 容器内）：
+#   docker exec openssh-server_forwarding curl http://127.0.0.1:8080
 ```
 
 ## 5. 核心模块
@@ -386,7 +380,7 @@ let opts = @src.ConnectOptions::new("example.com", 22, "alice")
 | `Client::shell(ch) -> Unit raise SshError` | 打开 shell 通道（不管理交互式 I/O） |
 | `Client::forward_local_port(local_port, remote_host, remote_port) -> Unit raise SshError` | 本地端口转发（-L），阻塞运行 |
 | `Client::forward_remote_port(remote_port, local_host, local_port) -> Unit raise SshError` | 远程端口转发（-R），阻塞运行 |
-| `Client::forward_socks5(local_port) -> Unit raise SshError` | SOCKS5 动态代理（-D），阻塞运行 |
+| `Client::forward_socks5(local_port) -> Unit raise SshError` | SOCKS5 动态代理（-D），阻塞运行；支持 IPv4 + 域名，不支持 IPv6 |
 | `Client::cancel_remote_forward(address, port) -> Unit raise SshError` | 取消远程端口转发 |
 | `Client::close() -> Unit` | 关闭 TCP 连接 |
 
@@ -423,6 +417,26 @@ SFTP v3 文件传输协议客户端：
 ```moonbit
 pub struct SftpClient {
   // 内部字段
+  priv client : Client
+  priv channel : Channel
+  priv version : Int       // SFTP 协议版本，当前固定为 3
+  priv mut request_id : Int
+}
+
+pub struct SftpAttrs {
+  priv flags : Int
+  size : Int?
+  uid : Int?
+  gid : Int?
+  permissions : Int?
+  atime : Int?
+  mtime : Int?
+}
+
+pub struct SftpDirEntry {
+  filename : String
+  longname : String
+  attrs : SftpAttrs
 }
 
 // 初始化
@@ -434,7 +448,7 @@ pub fn SftpClient::write_file(path : String, data : Bytes, permissions : Int) ->
 pub fn SftpClient::listdir(path : String) -> Array[SftpDirEntry] raise SshError
 
 // 底层 API
-pub fn SftpClient::open_file(path : String, flags : Int) -> Bytes raise SshError
+pub fn SftpClient::readdir(path : String) -> Array[SftpDirEntry] raise SshError
 pub fn SftpClient::read(handle : Bytes, offset : Int, length : Int) -> Bytes raise SshError
 pub fn SftpClient::write(handle : Bytes, offset : Int, data : Bytes) -> Unit raise SshError
 pub fn SftpClient::close_handle(handle : Bytes) -> Unit raise SshError
@@ -446,6 +460,8 @@ pub fn SftpClient::rename(oldpath : String, newpath : String) -> Unit raise SshE
 pub fn SftpClient::realpath(path : String) -> String raise SshError
 pub fn SftpClient::close() -> Unit
 ```
+
+> **当前限制：** 文件大小按 32 位 `Int` 读取，超过 4 GiB 的文件会被截断；`SftpAttrs` 仅解析 `SSH_FILEXFER_ATTR_SIZE / UIDGID / PERMISSIONS / ACCESSTIME / MODIFYTIME`，未识别的 flags 字段被忽略。
 
 ### 5.5 `known_hosts`
 
@@ -498,12 +514,15 @@ moon coverage analyze > uncovered.log
 | **v0.1** | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
 | **v0.2** | SFTP 协议 | ✅ 已发布 |
 | **v0.3** | 端口转发（remote） | ✅ 已发布 |
-| **v0.3+** | 端口转发（local/SOCKS5） | 📋 待开发 |
-| **v0.4** | shell 交互式 I/O / pty-req 对接 / 文档补全 | 📋 待开发 |
+| **v0.4** | 端口转发（local / SOCKS5） | 📋 待开发 |
+| **v0.5** | shell 交互式 I/O / pty-req 对接 | 📋 待开发 |
 
 **进展：**
+- [ ] 端口转发：`forward_local_port` / `forward_socks5`
+- [ ] SOCKS5 握手：IPv4 + 域名；不支持 IPv6
 - [ ] shell 交互（stdin/stdout 转发）
 - [ ] `Client::exec_pty()` 高层封装（`build_channel_request_pty` 已就绪）
+- [ ] macOS 验证（当前仅 Linux + Windows MinGW 经过测试）
 
 ## 8. 跨平台注意
 
