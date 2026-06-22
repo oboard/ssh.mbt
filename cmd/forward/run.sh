@@ -5,10 +5,6 @@ set -e
 source .env
 set +a
 
-
-moon clean
-moon build . --target native
-
 # export MOONBIT_SSH_DEBUG="true"
 
 # 远程转发示例
@@ -25,4 +21,10 @@ export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -R 8080:loc
 # # SOCKS5 代理示例
 # export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -D 1080 --password $MSSH_PASSWORD"
 
-../../_build/native/debug/build/cmd/forward/forward.exe
+
+moon clean
+
+moon run . --target native
+
+# moon build . --target native
+# ../../_build/native/debug/build/cmd/forward/forward.exe

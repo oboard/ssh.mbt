@@ -12,8 +12,7 @@ export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT --exec 'una
 
 moon clean
 
-# # 存在 ffi 时，直接 run 会没有任何输出，需要使用 build 后手动运行
-# moon build . --target native
+moon run . --target native
 
-moon build . --target native
-../../_build/native/debug/build/cmd/password/password.exe
+# moon build . --target native
+# ../../_build/native/debug/build/cmd/password/password.exe
