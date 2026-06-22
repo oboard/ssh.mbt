@@ -52,6 +52,7 @@ fn main {
   }
 }
 
+///|
 /// 转发模式。
 enum ForwardMode {
   Local(Int, String, Int)
@@ -59,6 +60,7 @@ enum ForwardMode {
   Socks5(Int)
 }
 
+///|
 /// 解析后的参数。
 struct ParsedArgs {
   opts : @src.ConnectOptions
@@ -66,6 +68,7 @@ struct ParsedArgs {
   mode : ForwardMode
 }
 
+///|
 fn parse_args(argv : Array[String]) -> ParsedArgs {
   if argv.length() == 0 {
     abort("missing user@host")

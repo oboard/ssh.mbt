@@ -390,7 +390,9 @@ pub fn parse_inbound_forwarded_tcpip(
   let port = r.read_uint32()
   let originator_ip = r.read_string_as_str()
   let originator_port = r.read_uint32()
-  (sender_channel, initial_window, max_packet, address, port, originator_ip, originator_port)
+  (
+    sender_channel, initial_window, max_packet, address, port, originator_ip, originator_port,
+  )
 }
 
 // ============== Inbound handler ==============
@@ -459,16 +461,14 @@ pub fn Channel::handle_inbound(
       let _sender = r.read_uint32()
       let data = r.read_string()
       match self.data_sink {
-        Buffer => {
+        Buffer =>
           for b in data {
             self.stdout_buf.push(b)
           }
-        }
-        Socket(sock) => {
+        Socket(sock) =>
           sock.write_bytes(data) catch {
             e => debug("* channel data → socket write failed: \{e}")
           }
-        }
       }
       [build_channel_window_adjust(self.peer_id, self.local_max_packet)]
     }
@@ -502,13 +502,16 @@ pub fn Channel::handle_inbound(
       let ch_type = r.read_string_as_str()
       match ch_type {
         "forwarded-tcpip" => {
-          let (sender_ch, _win, _max_pkt, _addr, _port, _orig_ip, _orig_port) =
-            parse_inbound_forwarded_tcpip(r)
+          let (sender_ch, _win, _max_pkt, _addr, _port, _orig_ip, _orig_port) = parse_inbound_forwarded_tcpip(
+            r,
+          )
           // 通知上层需要创建新 Channel 并连接本地目标
           // 通过设置 peer_id 和状态让 Client 知道有入站通道
           self.peer_id = sender_ch
           self.state = Open
-          debug("* INBOUND: forwarded-tcpip from server, sender_ch=\{sender_ch}")
+          debug(
+            "* INBOUND: forwarded-tcpip from server, sender_ch=\{sender_ch}",
+          )
           []
         }
         _ => {
@@ -533,7 +536,8 @@ pub fn Channel::handle_inbound(
         []
       }
     }
-    MSG_REQUEST_SUCCESS | MSG_REQUEST_FAILURE | b'\x02' | b'\x04' | b'\x07' => []
+    MSG_REQUEST_SUCCESS | MSG_REQUEST_FAILURE | b'\x02' | b'\x04' | b'\x07' =>
+      []
     _ => raise ProtocolError("channel: unexpected msg \{msg.to_int()}")
   }
 }
