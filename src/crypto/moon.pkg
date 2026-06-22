@@ -16,7 +16,7 @@ options(
     "cipher_wbtest.mbt": [ "native" ],
     "digest_wbtest.mbt": [ "native" ],
     "mac_wbtest.mbt": [ "native" ],
-    // "kex_wbtest.mbt": [ "native" ],
+    "kex_wbtest.mbt": [ "native" ],
     "pkey_wbtest.mbt": [ "native" ],
     "crypto_util_wbtest.mbt": [ "native" ],
   },

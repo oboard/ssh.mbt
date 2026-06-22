@@ -132,14 +132,10 @@ typedef struct rsa_st RSA;
   IMPORT_FUNC(int, OSSL_PARAM_BLD_push_utf8_string, (void *bld, const char *key, const char *buf, size_t bsize)) \
   IMPORT_FUNC(const void *, OSSL_PARAM_BLD_to_param, (void *bld)) \
   /* bignum */ \
-  IMPORT_FUNC(BIGNUM *, BN_new, (void)) \
   IMPORT_FUNC(void, BN_free, (BIGNUM *a)) \
   IMPORT_FUNC(int, BN_num_bits, (const BIGNUM *a)) \
   IMPORT_FUNC(BIGNUM *, BN_bin2bn, (const unsigned char *s, int len, BIGNUM *ret)) \
   IMPORT_FUNC(int, BN_bn2bin, (const BIGNUM *a, unsigned char *to)) \
-  IMPORT_FUNC(int, BN_bn2binpad, (const BIGNUM *a, unsigned char *to, int tolen)) \
-  IMPORT_FUNC(int, BN_mod_exp, (BIGNUM *r, const BIGNUM *a, const BIGNUM *p, const BIGNUM *m, BN_CTX *ctx)) \
-  IMPORT_FUNC(int, BN_rand_range, (BIGNUM *rnd, const BIGNUM *range)) \
   /* PEM / BIO */ \
   IMPORT_FUNC(BIO *, BIO_new_file, (const char *filename, const char *mode)) \
   IMPORT_FUNC(BIO *, BIO_new_mem_buf, (const void *buf, int len)) \
@@ -649,60 +645,6 @@ int moonbitlang_ssh_pem_read_public_key(const char *path_bytes, int path_len,
   BIO_free(bio);
   if (!pkey) return 0;
   *out = pkey;
-  return 1;
-}
-
-/* ------------------------------------------------------------------ */
-/* BIGNUM helpers                                                     */
-/* ------------------------------------------------------------------ */
-void *moonbitlang_ssh_bn_new(void) { return BN_new(); }
-void moonbitlang_ssh_bn_free(void *bn) { if (bn) BN_free((BIGNUM *)bn); }
-int moonbitlang_ssh_bn_bin2bn(const unsigned char *buf, int len, void *bn) {
-  return BN_bin2bn(buf, len, (BIGNUM *)bn) != 0;
-}
-
-int moonbitlang_ssh_bn_bn2binpad(void *bn, unsigned char *buf, int len) {
-  return BN_bn2binpad((BIGNUM *)bn, buf, len);
-}
-int moonbitlang_ssh_bn_num_bytes(void *bn) { return (BN_num_bits((BIGNUM *)bn) + 7) / 8; }
-int moonbitlang_ssh_bn_num_bits(void *bn) { return BN_num_bits((BIGNUM *)bn); }
-int moonbitlang_ssh_bn_mod_exp(void *r, void *a, void *p, void *m) {
-  return BN_mod_exp((BIGNUM *)r, (BIGNUM *)a, (BIGNUM *)p, (BIGNUM *)m, 0);
-}
-int moonbitlang_ssh_bn_rand_range(void *rnd, void *range) {
-  return BN_rand_range((BIGNUM *)rnd, (BIGNUM *)range);
-}
-
-/* Convert BIGNUM to SSH mpint format (string with optional leading 0x00) */
-int moonbitlang_ssh_bn_to_mpint(void *bn, unsigned char *buf, int *buf_len) {
-  BIGNUM *b = (BIGNUM *)bn;
-  int raw_len = (BN_num_bits(b) + 7) / 8;
-  if (raw_len == 0) {
-    if (*buf_len >= 4) {
-      buf[0] = 0; buf[1] = 0; buf[2] = 0; buf[3] = 1;
-      buf[4] = 0;
-      *buf_len = 5;
-      return 1;
-    }
-    return 0;
-  }
-  /* Check if high bit is set -> need leading 0x00 */
-  unsigned char *tmp = (unsigned char *)malloc((size_t)raw_len);
-  BN_bn2bin(b, tmp);
-  int need_zero = (tmp[0] & 0x80) != 0;
-  int total_len = 4 + raw_len + (need_zero ? 1 : 0);
-  if (*buf_len < total_len) { free(tmp); return 0; }
-  /* Write uint32 length */
-  uint32_t nlen = (uint32_t)(raw_len + (need_zero ? 1 : 0));
-  buf[0] = (unsigned char)(nlen >> 24);
-  buf[1] = (unsigned char)(nlen >> 16);
-  buf[2] = (unsigned char)(nlen >> 8);
-  buf[3] = (unsigned char)nlen;
-  int off = 4;
-  if (need_zero) { buf[off] = 0; off++; }
-  memcpy(buf + off, tmp, (size_t)raw_len);
-  free(tmp);
-  *buf_len = total_len;
   return 1;
 }
 
