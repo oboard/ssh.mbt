@@ -24,10 +24,10 @@
 | `shell` 通道 | ✅ | `Client::shell()`（不管理交互式 I/O，仅打开 shell 通道） |
 | `known_hosts` 解析 | ✅ | 基础解析 + 通配符；HMAC-SHA1 哈希形式（`\|1\|…`）待支持 |
 | SFTP | ✅ | SFTP v3 协议实现（`src/sftp.mbt`）|
-| 本地端口转发 (-L) | ✅ | `Client::forward_local_port()` — `direct-tcpip` 通道 |
 | 远程端口转发 (-R) | ✅ | `Client::forward_remote_port()` — `tcpip-forward` 全局请求 + `forwarded-tcpip` 通道 |
-| SOCKS5 动态转发 (-D) | ✅ | `Client::forward_socks5()` — SOCKS5 代理 |
-| X11 转发 | ❌ | 未实现 |
+| 本地端口转发 (-L) | ❌ | `Client::forward_local_port()` — `direct-tcpip` 通道 |
+| SOCKS5 动态转发 (-D) | ❌ | `Client::forward_socks5()` — SOCKS5 代理 |
+| X11 转发 |  | 未实现 |
 
 ## 2. 架构
 
@@ -327,14 +327,14 @@ export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 --password 123456 --command
 # 前置：bash scripts/ssh-server/password.sh
 cd cmd/forward
 
+# 远程转发 (-R)：远端 9090 → 通过 SSH → 本地 localhost:3000
+export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -R 9090:localhost:3000 --password 123456"
+../../_build/native/debug/build/cmd/forward/forward.exe
+
 # 本地转发 (-L)：本地 8080 → 通过 SSH → 远端 localhost:80
 export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -L 8080:localhost:80 --password 123456"
 ../../_build/native/debug/build/cmd/forward/forward.exe
 # 然后访问 http://127.0.0.1:8080
-
-# 远程转发 (-R)：远端 9090 → 通过 SSH → 本地 localhost:3000
-export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -R 9090:localhost:3000 --password 123456"
-../../_build/native/debug/build/cmd/forward/forward.exe
 
 # SOCKS5 代理 (-D)：本地 1080 作为 SOCKS5 代理
 export MOONBIT_CLI_ARGS="admin@127.0.0.1 --port 1022 -D 1080 --password 123456"
