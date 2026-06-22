@@ -16,6 +16,11 @@ export MOONBIT_SSH_DEBUG="true"
 
 # 远程转发示例
 export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -R 8080:localhost:1080 --password $MSSH_PASSWORD"
+# 验证
+#  - ssh 登录
+#  ssh $MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT
+#  - ssh 内执行 curl
+#  curl http://127.0.0.1:8080
 
 # # SOCKS5 代理示例
 # export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -D 1080 --password $MSSH_PASSWORD"
