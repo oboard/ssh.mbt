@@ -202,7 +202,8 @@ moonbit-ssh-client/
         ├── password.sh          密码认证 sshd（端口 1022→2222）
         ├── key-ed25519.sh       生成 ed25519 密钥 + 公钥认证 sshd（端口 2022→2222）
         ├── key-rsa.sh           生成 rsa 密钥 + 公钥认证 sshd（端口 3022→2222）
-        └── key-ecdsa.sh         生成 ecdsa 密钥 + 公钥认证 sshd（端口 4022→2222）
+        ├── key-ecdsa.sh         生成 ecdsa 密钥 + 公钥认证 sshd（端口 4022→2222）
+        └── forwarding.sh        密码认证 sshd（端口 5022→2222）+ 端口转发
 ```
 
 ## 4. 快速开始
@@ -239,6 +240,7 @@ apt-get install -y gcc libssl-dev
 | `key-ed25519.sh` | 生成 ed25519 密钥并启动公钥认证 sshd | `2022` |
 | `key-rsa.sh` | 生成 4096 位 RSA 密钥并启动公钥认证 sshd | `3022` |
 | `key-ecdsa.sh` | 生成 ecdsa 密钥并启动公钥认证 sshd | `4022` |
+| `forwarding.sh` | 启动密码认证 sshd 并开启端口转发 | `5022` |
 
 > **注意：** 每次启动 `key-*.sh` 都会清空并重新生成同名密钥对（id_ed25519 / id_rsa / id_ecdsa）；生成位置在 `scripts/ssh-server/` 内，已被 `.gitignore` 排除。
 
@@ -256,8 +258,6 @@ bash scripts/ssh-server/password.sh
 2. `export MOONBIT_CLI_ARGS="..."`
 3. `moon clean && moon build . --target native`
 4. 执行 `_build/native/debug/build/cmd/<name>/<name>.exe`
-
-> 因为 `cmd` 包在 `moon build` 时链接了 FFI，`moon run` 不会拿到 stdout；因此 `run.sh` 用 `build` + 手动执行。
 
 #### 4.3.1 密码认证
 
@@ -497,7 +497,8 @@ moon coverage analyze > uncovered.log
 |------|------|------|
 | **v0.1** | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
 | **v0.2** | SFTP 协议 | ✅ 已发布 |
-| **v0.3** | 端口转发（local/remote/SOCKS5）/ shell 交互 | ✅ 已发布 |
+| **v0.3** | 端口转发（remote） | ✅ 已发布 |
+| **v0.3+** | 端口转发（local/SOCKS5） | 📋 待开发 |
 | **v0.4** | shell 交互式 I/O / pty-req 对接 / 文档补全 | 📋 待开发 |
 
 **进展：**
