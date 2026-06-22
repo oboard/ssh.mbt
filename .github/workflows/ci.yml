@@ -76,7 +76,7 @@ jobs:
             bash "$f"
           done
       
-      - name: Run cmd/sftp sequentially, run moon connect to ssh server
+      - name: Run cmd/sftp sequentially, run moon connect to ssh server and file & directory operations
         run: |
           set -e
 
@@ -86,6 +86,24 @@ jobs:
           cd cmd/sftp
           chmod +x run.sh
           bash run.sh
+
+      - name: Run cmd/forwarding sequentially, run moon connect to ssh server and port forwarding
+        run: |
+          set -e
+          
+          echo "Running cmd/forwarding run.sh..."
+          export workspace=$(pwd)
+          
+          cd cmd/forwarding
+          chmod +x run.sh
+          bash run.sh &
+          RUN_PID=$!
+          echo "run.sh started with PID $RUN_PID"
+
+          sleep 5
+          docker exec openssh-server_forwarding curl -vv http://127.0.0.1:8080
+
+          kill $RUN_PID 2>/dev/null || true
 
       - name: Tokei
         run: docker run --rm -v $(pwd):/src ghcr.io/xampprocky/tokei:latest .
