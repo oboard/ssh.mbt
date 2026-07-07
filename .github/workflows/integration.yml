@@ -115,8 +115,8 @@ jobs:
           echo "Running cmd/forwarding run-socks5.sh..."
           export workspace=$(pwd)
 
-          # 获取 Docker 网关 IP
-          GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '{print $3}')
+          # 获取 Docker 网关 IP（只取 default 行，避免 link scope 行污染）
+          GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '/^default/ {print $3; exit}')
           echo "SOCKS5 target: $GATEWAY_IP:1080"
 
           cd cmd/forwarding

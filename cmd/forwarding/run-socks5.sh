@@ -14,8 +14,8 @@ set -e
 source .env
 set +a
 
-# 获取 Docker 网关 IP
-GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '{print $3}')
+# 获取 Docker 网关 IP（只取 default 行，避免 link scope 行污染）
+GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '/^default/ {print $3; exit}')
 echo "SOCKS5 target will be: $GATEWAY_IP:1080 (host nginx via Docker gateway)"
 echo "Verify with: curl --socks5 127.0.0.1:3080 http://$GATEWAY_IP:1080"
 

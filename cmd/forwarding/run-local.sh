@@ -15,7 +15,10 @@ source .env
 set +a
 
 # 获取 Docker 网关 IP（SSH 服务器容器内访问宿主机用）
-GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '{print $3}')
+# 注意：某些容器内 `ip route show default` 会输出多行（含 link scope 行），
+# 必须只取 default 行，否则 GATEWAY_IP 会带换行符导致 getaddrinfo 失败
+# （服务端返回 SSH_OPEN_CONNECT_FAILED / "Try again"）。
+GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '/^default/ {print $3; exit}')
 echo "Target: $GATEWAY_IP:1080 (host nginx via Docker gateway)"
 
 # export MOONBIT_SSH_DEBUG="true"

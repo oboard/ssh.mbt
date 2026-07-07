@@ -215,6 +215,32 @@ test "handle_inbound/open_failure_moves_to_done" {
 }
 
 ///|
+test "handle_inbound/open_failure_captures_reason_and_message" {
+  // 服务端 OPEN_FAILURE 应把 reason 和 message 暴露给客户端，
+  // 这样上层能区分"管理禁止"/"连接失败"/"未知类型"等具体场景。
+  let w = Writer::new()
+  w.write_byte(0x5c)
+  w.write_uint32(0)
+  w.write_uint32(2) // SSH_OPEN_CONNECT_FAILED
+  w.write_string_from_str("connect failed")
+  w.write_string_from_str("en")
+  let ch = Channel::new(1)
+  let _ = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  @debug.debug_inspect(ch.open_failure_reason(), content="Some(2)")
+  @debug.debug_inspect(ch.open_failure_message(), content="Some(\"connect failed\")")
+}
+
+///|
+test "open_failure_reason_name/maps_known_codes" {
+  // RFC 4254 §5.1 定义的四个 reason code 应映射到常量名
+  inspect(open_failure_reason_name(1), content="SSH_OPEN_ADMINISTRATIVELY_PROHIBITED")
+  inspect(open_failure_reason_name(2), content="SSH_OPEN_CONNECT_FAILED")
+  inspect(open_failure_reason_name(3), content="SSH_OPEN_UNKNOWN_CHANNEL_TYPE")
+  inspect(open_failure_reason_name(4), content="SSH_OPEN_RESOURCE_SHORTAGE")
+  inspect(open_failure_reason_name(99), content="unknown(99)")
+}
+
+///|
 test "handle_inbound/window_adjust_increases_remote_window" {
   // 93 (WINDOW_ADJUST) + sender + bytes_to_add
   let w = Writer::new()

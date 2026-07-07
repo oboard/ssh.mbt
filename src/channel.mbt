@@ -81,6 +81,10 @@ pub struct Channel {
   mut channel_type : ChannelType
   /// 数据去向（缓冲区或直连 socket）
   mut data_sink : DataSink
+  /// OPEN_FAILURE 服务端返回的原因码（RFC 4254 §5.1）；未失败时为 None
+  mut open_failure_reason : Int?
+  /// OPEN_FAILURE 服务端返回的可读描述；未失败时为 None
+  mut open_failure_message : String?
 }
 
 ///|
@@ -131,6 +135,8 @@ pub fn Channel::new(local_id : Int) -> Channel {
     exit_signal: None,
     channel_type: Session,
     data_sink: Buffer,
+    open_failure_reason: None,
+    open_failure_message: None,
   }
 }
 
@@ -162,6 +168,32 @@ pub fn Channel::is_open(self : Channel) -> Bool {
 /// 远端 exec 退出码；若 `exec` 尚未结束或未触发 `exit-status` 请求则为 `None`。
 pub fn Channel::exit_status(self : Channel) -> Int? {
   self.exit_status
+}
+
+///|
+/// OPEN_FAILURE 服务端返回的原因码（RFC 4254 §5.1）。通道被服务端拒绝时为 `Some(reason)`，
+/// 成功打开或尚未收到 OPEN_FAILURE 时为 `None`。
+pub fn Channel::open_failure_reason(self : Channel) -> Int? {
+  self.open_failure_reason
+}
+
+///|
+/// OPEN_FAILURE 服务端返回的可读描述；通道被拒绝时为 `Some(msg)`，否则为 `None`。
+pub fn Channel::open_failure_message(self : Channel) -> String? {
+  self.open_failure_message
+}
+
+///|
+/// 将 OPEN_FAILURE reason code 映射为 RFC 4254 §5.1 定义的常量名。
+/// 未识别的值返回 `"unknown(<n>)"`。
+pub fn open_failure_reason_name(reason : Int) -> String {
+  match reason {
+    1 => "SSH_OPEN_ADMINISTRATIVELY_PROHIBITED"
+    2 => "SSH_OPEN_CONNECT_FAILED"
+    3 => "SSH_OPEN_UNKNOWN_CHANNEL_TYPE"
+    4 => "SSH_OPEN_RESOURCE_SHORTAGE"
+    _ => "unknown(\{reason})"
+  }
 }
 
 // ============== Wire format builders ==============
@@ -445,9 +477,11 @@ pub fn Channel::handle_inbound(
     }
     MSG_CHANNEL_OPEN_FAILURE => {
       let _sender = r.read_uint32()
-      let _reason = r.read_uint32()
-      let _msg = r.read_string_as_str()
+      let reason = r.read_uint32()
+      let msg = r.read_string_as_str()
       let _lang = r.read_string_as_str()
+      self.open_failure_reason = Some(reason)
+      self.open_failure_message = Some(msg)
       self.state = Done
       []
     }

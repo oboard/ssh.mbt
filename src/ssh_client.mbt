@@ -693,7 +693,13 @@ fn Client::open_direct_tcpip(
       break
     }
     if ch.state() == Done {
-      raise ProtocolError("direct-tcpip: failed to open")
+      let detail = match (ch.open_failure_reason(), ch.open_failure_message()) {
+        (Some(r), Some(m)) =>
+          " (reason=\{open_failure_reason_name(r)}, msg=\"\{m}\")"
+        (Some(r), None) => " (reason=\{open_failure_reason_name(r)})"
+        _ => ""
+      }
+      raise ProtocolError("direct-tcpip: failed to open\{detail}")
     }
   }
   ch
