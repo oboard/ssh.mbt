@@ -349,3 +349,273 @@ test "kex_state/eq_and_debug" {
   inspect(s1 == s3, content="true")
   inspect(s1 == s2, content="false")
 }
+
+// ============== hash_alg_for_kex ==============
+
+///|
+test "kex/hash_alg_for_kex_sha1" {
+  let alg = hash_alg_for_kex("diffie-hellman-group14-sha1")
+  // SHA-1 输出 20 字节
+  let h = @crypto.Hasher::new(alg)
+  h.update(b"test")
+  let digest = h.finalize()
+  inspect(digest.length(), content="20")
+}
+
+///|
+test "kex/hash_alg_for_kex_sha256_ecdh" {
+  let alg = hash_alg_for_kex("ecdh-sha2-nistp256")
+  let h = @crypto.Hasher::new(alg)
+  h.update(b"test")
+  let digest = h.finalize()
+  inspect(digest.length(), content="32")
+}
+
+///|
+test "kex/hash_alg_for_kex_sha256_dh" {
+  let alg = hash_alg_for_kex("diffie-hellman-group14-sha256")
+  let h = @crypto.Hasher::new(alg)
+  h.update(b"test")
+  let digest = h.finalize()
+  inspect(digest.length(), content="32")
+}
+
+///|
+test "kex/hash_alg_for_kex_unknown_raises" {
+  try {
+    let _ = hash_alg_for_kex("unknown-alg")
+    fail("expected ProtocolError")
+  } catch {
+    ProtocolError(msg) => {
+      inspect(msg.contains("no hash for"), content="true")
+      inspect(msg.contains("unknown-alg"), content="true")
+    }
+    _ => fail("expected ProtocolError")
+  }
+}
+
+// ============== is_ecdh_alg / is_dh_alg ==============
+
+///|
+test "kex/is_ecdh_alg_true" {
+  inspect(is_ecdh_alg("ecdh-sha2-nistp256"), content="true")
+}
+
+///|
+test "kex/is_ecdh_alg_false" {
+  inspect(is_ecdh_alg("diffie-hellman-group14-sha256"), content="false")
+  inspect(is_ecdh_alg("unknown"), content="false")
+}
+
+///|
+test "kex/is_dh_alg_sha256" {
+  inspect(is_dh_alg("diffie-hellman-group14-sha256"), content="true")
+}
+
+///|
+test "kex/is_dh_alg_sha1" {
+  inspect(is_dh_alg("diffie-hellman-group14-sha1"), content="true")
+}
+
+///|
+test "kex/is_dh_alg_false" {
+  inspect(is_dh_alg("ecdh-sha2-nistp256"), content="false")
+  inspect(is_dh_alg("unknown"), content="false")
+}
+
+// ============== compute_ecdh_exchange_hash ==============
+
+///|
+test "kex/compute_ecdh_exchange_hash_deterministic" {
+  // 相同输入应产生相同哈希
+  let v_c = b"SSH-2.0-MoonSSH_0.1.0"
+  let v_s = b"SSH-2.0-OpenSSH_8.9"
+  let i_c = Bytes::make(20, b'\x01')
+  let i_s = Bytes::make(20, b'\x02')
+  let k_s = Bytes::from_array([b'\x00', b'\x01', b'\x02'])
+  let q_c = Bytes::make(32, b'\x03')
+  let q_s = Bytes::make(32, b'\x04')
+  let k = Bytes::from_array([b'\x00', b'\x05'])
+
+  let h1 = compute_ecdh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k,
+  ) catch {
+    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+  }
+  let h2 = compute_ecdh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k,
+  ) catch {
+    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+  }
+  // SHA-256 输出 32 字节
+  inspect(h1.length(), content="32")
+  // 相同输入 -> 相同输出
+  let mut same = true
+  for i in 0..<h1.length() {
+    if h1[i] != h2[i] {
+      same = false
+    }
+  }
+  inspect(same, content="true")
+}
+
+///|
+test "kex/compute_ecdh_exchange_hash_different_input" {
+  let v_c = b"SSH-2.0-MoonSSH_0.1.0"
+  let v_s = b"SSH-2.0-OpenSSH_8.9"
+  let i_c = Bytes::make(20, b'\x01')
+  let i_s = Bytes::make(20, b'\x02')
+  let k_s = Bytes::from_array([b'\x00', b'\x01', b'\x02'])
+  let q_c = Bytes::make(32, b'\x03')
+  let q_s = Bytes::make(32, b'\x04')
+  let k1 = Bytes::from_array([b'\x00', b'\x05'])
+  let k2 = Bytes::from_array([b'\x00', b'\x06'])
+
+  let h1 = compute_ecdh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k1,
+  ) catch {
+    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+  }
+  let h2 = compute_ecdh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k2,
+  ) catch {
+    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+  }
+  // 不同 shared_secret -> 不同哈希
+  let mut diff = false
+  for i in 0..<h1.length() {
+    if h1[i] != h2[i] {
+      diff = true
+    }
+  }
+  inspect(diff, content="true")
+}
+
+// ============== compute_dh_exchange_hash ==============
+
+///|
+test "kex/compute_dh_exchange_hash_deterministic" {
+  let v_c = b"SSH-2.0-MoonSSH_0.1.0"
+  let v_s = b"SSH-2.0-OpenSSH_8.9"
+  let i_c = Bytes::make(20, b'\x01')
+  let i_s = Bytes::make(20, b'\x02')
+  let k_s = Bytes::from_array([b'\x00', b'\x01', b'\x02'])
+  let e = Bytes::from_array([b'\x00', b'\x03'])
+  let f = Bytes::from_array([b'\x00', b'\x04'])
+  let k = Bytes::from_array([b'\x00', b'\x05'])
+
+  let h1 = compute_dh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+  ) catch {
+    e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
+  }
+  let h2 = compute_dh_exchange_hash(
+    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+  ) catch {
+    e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
+  }
+  inspect(h1.length(), content="32")
+  let mut same = true
+  for i in 0..<h1.length() {
+    if h1[i] != h2[i] {
+      same = false
+    }
+  }
+  inspect(same, content="true")
+}
+
+///|
+test "kex/compute_dh_exchange_hash_sha1" {
+  let v_c = b"SSH-2.0-test"
+  let v_s = b"SSH-2.0-server"
+  let i_c = Bytes::make(16, b'\x10')
+  let i_s = Bytes::make(16, b'\x20')
+  let k_s = Bytes::from_array([b'\xab'])
+  let e = Bytes::from_array([b'\x00', b'\x01'])
+  let f = Bytes::from_array([b'\x00', b'\x02'])
+  let k = Bytes::from_array([b'\x00', b'\x03'])
+
+  let h = compute_dh_exchange_hash(
+    @crypto.Algorithm::sha1(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+  ) catch {
+    e => fail("compute_dh_exchange_hash sha1: \{to_repr(e)}")
+  }
+  // SHA-1 输出 20 字节
+  inspect(h.length(), content="20")
+}
+
+// ============== derive_keys ==============
+
+///|
+test "kex/derive_keys_sha256" {
+  // RFC 4253 §7.2 密钥派生
+  let session_id = Bytes::make(32, b'\xaa')
+  let h = Bytes::make(32, b'\xbb')
+  let k = Bytes::from_array([b'\x00', b'\xcc'])
+
+  let (iv_c2s, iv_s2c, ek_c2s, ek_s2c, mk_c2s, mk_s2c) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k, session_id, 16, 16, 32,
+  ) catch {
+    e => fail("derive_keys: \{to_repr(e)}")
+  }
+  // IV 长度 = 16
+  inspect(iv_c2s.length(), content="16")
+  inspect(iv_s2c.length(), content="16")
+  // 加密密钥长度 = 16
+  inspect(ek_c2s.length(), content="16")
+  inspect(ek_s2c.length(), content="16")
+  // MAC 密钥长度 = 32
+  inspect(mk_c2s.length(), content="32")
+  inspect(mk_s2c.length(), content="32")
+  // 相同输入应产生相同密钥
+  let (iv_c2s2, _, _, _, _, _) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k, session_id, 16, 16, 32,
+  ) catch {
+    e => fail("derive_keys 2: \{to_repr(e)}")
+  }
+  let mut same = true
+  for i in 0..<iv_c2s.length() {
+    if iv_c2s[i] != iv_c2s2[i] {
+      same = false
+    }
+  }
+  inspect(same, content="true")
+}
+
+///|
+test "kex/derive_keys_different_k_different_output" {
+  let session_id = Bytes::make(32, b'\xaa')
+  let h = Bytes::make(32, b'\xbb')
+  let k1 = Bytes::from_array([b'\x00', b'\x01'])
+  let k2 = Bytes::from_array([b'\x00', b'\x02'])
+
+  let (iv1, _, _, _, _, _) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k1, session_id, 16, 16, 32,
+  ) catch {
+    e => fail("derive_keys k1: \{to_repr(e)}")
+  }
+  let (iv2, _, _, _, _, _) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k2, session_id, 16, 16, 32,
+  ) catch {
+    e => fail("derive_keys k2: \{to_repr(e)}")
+  }
+  let mut diff = false
+  for i in 0..<iv1.length() {
+    if iv1[i] != iv2[i] {
+      diff = true
+    }
+  }
+  inspect(diff, content="true")
+}
+
+// ============== kex_random_bytes ==============
+
+///|
+test "kex/kex_random_bytes_length" {
+  let b1 = kex_random_bytes(16)
+  inspect(b1.length(), content="16")
+  let b32 = kex_random_bytes(32)
+  inspect(b32.length(), content="32")
+  let b0 = kex_random_bytes(0)
+  inspect(b0.length(), content="0")
+}

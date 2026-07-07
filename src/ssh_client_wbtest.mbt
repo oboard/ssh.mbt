@@ -240,3 +240,141 @@ test "ssh_client/build_signature_blob_rsa" {
   let sig_data = r.read_string()
   inspect(sig_data.length(), content="2")
 }
+
+// ============== ConnectOptions builder chain ==============
+
+///|
+test "ssh_client/connect_options_with_strict_empty_content" {
+  // 空 known_hosts -> 所有主机都被拒绝
+  let opts = ConnectOptions::new("host", 22, "user").with_strict_host_key_check(
+    "",
+  ) catch {
+    e => fail("with_strict_host_key_check empty: \{to_repr(e)}")
+  }
+  let decision = verify_host_key(
+    opts.host_key_policy, "host", 22, "ssh-rsa", b"key",
+  )
+  inspect(decision is RejectUnknown, content="true")
+}
+
+///|
+test "ssh_client/connect_options_with_strict_bad_line_skipped" {
+  // 损坏的行应被跳过，不影响其他条目
+  let content = "bad-line-no-alg\nexample.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA7Q=="
+  let opts = ConnectOptions::new("example.com", 22, "user").with_strict_host_key_check(
+    content,
+  ) catch {
+    e => fail("with_strict_host_key_check: \{to_repr(e)}")
+  }
+  // 条目存在，但 key 不匹配 -> RejectMismatch
+  let decision = verify_host_key(
+    opts.host_key_policy, "example.com", 22, "ssh-ed25519",
+    Bytes::from_array([b'\x00', b'\xff']),
+  )
+  inspect(decision is RejectMismatch(_, _), content="true")
+}
+
+///|
+test "ssh_client/connect_options_tofu_reject_changed_key" {
+  // TOFU: prompt 返回 true 后更换 key -> RejectMismatch
+  let prompt : (String, String, Bytes) -> Bool = (_h, _a, _k) => true
+  let opts = ConnectOptions::new("host", 22, "user").with_trust_on_first_use(
+    "", prompt,
+  ) catch {
+    e => fail("tofu: \{to_repr(e)}")
+  }
+  // 第一次：接受
+  let first = verify_host_key(
+    opts.host_key_policy, "host", 22, "ssh-rsa", b"key1",
+  )
+  inspect(first is Accept, content="true")
+  // 第二次不同 key -> RejectMismatch
+  let second = verify_host_key(
+    opts.host_key_policy, "host", 22, "ssh-rsa", b"key2",
+  )
+  inspect(second is RejectMismatch(_, _), content="true")
+}
+
+///|
+test "ssh_client/connect_options_tofu_prompt_reject" {
+  // TOFU: prompt 返回 false -> RejectByUser
+  let prompt : (String, String, Bytes) -> Bool = (_h, _a, _k) => false
+  let opts = ConnectOptions::new("host", 22, "user").with_trust_on_first_use(
+    "", prompt,
+  ) catch {
+    e => fail("tofu reject: \{to_repr(e)}")
+  }
+  let decision = verify_host_key(
+    opts.host_key_policy, "host", 22, "ssh-rsa", b"key",
+  )
+  inspect(decision is RejectByUser, content="true")
+}
+
+///|
+test "ssh_client/connect_options_callback_accept_and_reject" {
+  // Callback 模式：自定义校验器
+  let accept_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier(
+    (_a, _k) => true,
+  )
+  let r1 = verify_host_key(
+    accept_all.host_key_policy, "h", 22, "ssh-rsa", b"k",
+  )
+  inspect(r1 is Accept, content="true")
+
+  let reject_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier(
+    (_a, _k) => false,
+  )
+  let r2 = verify_host_key(
+    reject_all.host_key_policy, "h", 22, "ssh-rsa", b"k",
+  )
+  inspect(r2 is RejectByUser, content="true")
+}
+
+// ============== ConnectOptions field access ==============
+
+///|
+test "ssh_client/connect_options_field_values" {
+  let opts = ConnectOptions::new("myhost", 2222, "admin")
+  inspect(opts.host, content="myhost")
+  inspect(opts.port, content="2222")
+  inspect(opts.user, content="admin")
+  inspect(opts.client_banner is None, content="true")
+  inspect(opts.timeout_ms, content="30000")
+}
+
+///|
+test "ssh_client/connect_options_with_insecure_accepts_any" {
+  // Insecure 模式应接受任何 host key
+  let opts = ConnectOptions::new("any", 22, "u").with_insecure_host_key()
+  let r = verify_host_key(
+    opts.host_key_policy, "any", 22, "any-alg", b"any-key",
+  )
+  inspect(r is Accept, content="true")
+}
+
+// ============== parse_cipher_algorithm edge cases ==============
+
+///|
+test "ssh_client/parse_cipher_algorithm_aes128_ctr_properties" {
+  let alg = parse_cipher_algorithm("aes128-ctr")
+  // AES-128: 16 字节 key, 16 字节 IV, 16 字节 block
+  inspect(alg.key_len(), content="16")
+  inspect(alg.iv_len(), content="16")
+  inspect(alg.block_len(), content="16")
+}
+
+// ============== parse_mac_algorithm edge cases ==============
+
+///|
+test "ssh_client/parse_mac_algorithm_hmac_sha1_properties" {
+  let alg = parse_mac_algorithm("hmac-sha1")
+  // SHA-1 HMAC 输出 20 字节
+  inspect(alg.output_len(), content="20")
+}
+
+///|
+test "ssh_client/parse_mac_algorithm_hmac_sha256_properties" {
+  let alg = parse_mac_algorithm("hmac-sha2-256")
+  // SHA-256 HMAC 输出 32 字节
+  inspect(alg.output_len(), content="32")
+}

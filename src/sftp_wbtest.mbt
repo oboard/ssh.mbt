@@ -275,3 +275,149 @@ test "sftp/attrs_parse_consistency" {
   inspect(a1.flags, content=a2.flags.to_string())
   @debug.debug_inspect(a1.size, content=@debug.to_string(a2.size))
 }
+
+// ============== parse_attrs additional flag combinations ==============
+
+///|
+test "sftp/parse_attrs_uidgid_only" {
+  // 仅设置 UIDGID 标志
+  let w = Writer::new()
+  w.write_uint32(SSH_FILEXFER_ATTR_UIDGID)
+  w.write_uint32(1000) // uid
+  w.write_uint32(1000) // gid
+  let attrs = parse_attrs(w.to_bytes())
+  inspect(attrs.size is None, content="true")
+  @debug.debug_inspect(attrs.uid, content="Some(1000)")
+  @debug.debug_inspect(attrs.gid, content="Some(1000)")
+  inspect(attrs.permissions is None, content="true")
+  inspect(attrs.atime is None, content="true")
+}
+
+///|
+test "sftp/parse_attrs_acmodtime_only" {
+  // 仅设置 ACMODTIME 标志
+  let w = Writer::new()
+  w.write_uint32(SSH_FILEXFER_ATTR_ACMODTIME)
+  w.write_uint32(1700000000) // atime
+  w.write_uint32(1700000001) // mtime
+  let attrs = parse_attrs(w.to_bytes())
+  inspect(attrs.size is None, content="true")
+  inspect(attrs.uid is None, content="true")
+  inspect(attrs.permissions is None, content="true")
+  @debug.debug_inspect(attrs.atime, content="Some(1700000000)")
+  @debug.debug_inspect(attrs.mtime, content="Some(1700000001)")
+}
+
+///|
+test "sftp/parse_attrs_size_and_permissions" {
+  // SIZE + PERMISSIONS 组合
+  let w = Writer::new()
+  w.write_uint32(SSH_FILEXFER_ATTR_SIZE.lor(SSH_FILEXFER_ATTR_PERMISSIONS))
+  w.write_uint32(4096) // size low
+  w.write_uint32(0) // size high
+  w.write_uint32(0o755) // permissions
+  let attrs = parse_attrs(w.to_bytes())
+  @debug.debug_inspect(attrs.size, content="Some(4096)")
+  inspect(attrs.uid is None, content="true")
+  @debug.debug_inspect(attrs.permissions, content="Some(493)")
+}
+
+// ============== parse_attrs_from_reader additional cases ==============
+
+///|
+test "sftp/parse_attrs_from_reader_uidgid" {
+  // 从 Reader 中解析 UIDGID 属性
+  let w = Writer::new()
+  w.write_uint32(SSH_FILEXFER_ATTR_UIDGID)
+  w.write_uint32(500) // uid
+  w.write_uint32(500) // gid
+  w.write_uint32(0xDEAD) // 后面的哨兵数据
+  let r = Reader::new(w.to_bytes())
+  let attrs = parse_attrs_from_reader(r)
+  @debug.debug_inspect(attrs.uid, content="Some(500)")
+  @debug.debug_inspect(attrs.gid, content="Some(500)")
+  // Reader 位置应正确推进
+  let sentinel = r.read_uint32()
+  inspect(sentinel, content="57005") // 0xDEAD = 57005
+}
+
+///|
+test "sftp/parse_attrs_from_reader_acmodtime" {
+  // 从 Reader 中解析 ACMODTIME 属性
+  let w = Writer::new()
+  w.write_uint32(SSH_FILEXFER_ATTR_ACMODTIME)
+  w.write_uint32(1609459200) // atime
+  w.write_uint32(1609459260) // mtime
+  let r = Reader::new(w.to_bytes())
+  let attrs = parse_attrs_from_reader(r)
+  @debug.debug_inspect(attrs.atime, content="Some(1609459200)")
+  @debug.debug_inspect(attrs.mtime, content="Some(1609459260)")
+}
+
+// ============== encode_sftp_packet / decode_sftp_packet roundtrip ==============
+
+///|
+test "sftp/encode_decode_roundtrip" {
+  // 编码后解码应还原
+  let payload = Bytes::from_array([b'\x01', b'\x02', b'\x03'])
+  let pkt = encode_sftp_packet(SSH_FXP_READ, 99, payload)
+  let decoded = decode_sftp_packet(pkt)
+  inspect(decoded.typ, content="b'\\x05'") // SSH_FXP_READ
+  inspect(decoded.id, content="99")
+  let r = Reader::new(decoded.data)
+  inspect(r.read_byte(), content="b'\\x01'")
+  inspect(r.read_byte(), content="b'\\x02'")
+  inspect(r.read_byte(), content="b'\\x03'")
+  inspect(r.remaining(), content="0")
+}
+
+///|
+test "sftp/encode_sftp_packet_empty_payload" {
+  // 空 payload
+  let pkt = encode_sftp_packet(SSH_FXP_CLOSE, 1, b"")
+  let r = Reader::new(pkt)
+  let len = r.read_uint32()
+  inspect(len, content="5") // 1(type) + 4(id) + 0(payload)
+  let typ = r.read_byte()
+  inspect(typ, content="b'\\x04'") // SSH_FXP_CLOSE
+  let id = r.read_uint32()
+  inspect(id, content="1")
+  inspect(r.remaining(), content="0")
+}
+
+// ============== check_ok with different status codes ==============
+
+///|
+test "sftp/check_ok_eof_raises" {
+  // SSH_FX_EOF 应抛出
+  let w = Writer::new()
+  w.write_uint32(SSH_FX_EOF)
+  w.write_string_from_str("End of file")
+  try {
+    check_ok(w.to_bytes())
+    fail("expected ProtocolError")
+  } catch {
+    ProtocolError(msg) => {
+      inspect(msg.contains("SFTP status 1:"), content="true")
+    }
+    _ => fail("expected ProtocolError")
+  }
+}
+
+///|
+test "sftp/check_ok_permission_denied_raises" {
+  // SSH_FX_PERMISSION_DENIED (3) 应抛出
+  let w = Writer::new()
+  w.write_uint32(3)
+  w.write_string_from_str("Permission denied")
+  try {
+    check_ok(w.to_bytes())
+    fail("expected ProtocolError")
+  } catch {
+    ProtocolError(msg) => {
+      inspect(msg.contains("SFTP status 3:"), content="true")
+      inspect(msg.contains("Permission denied"), content="true")
+    }
+    _ => fail("expected ProtocolError")
+  }
+}
