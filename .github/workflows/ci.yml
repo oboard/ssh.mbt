@@ -99,21 +99,60 @@ jobs:
           chmod +x run.sh
           bash run.sh
 
-      - name: Run cmd/forwarding sequentially, run moon connect to ssh server and port forwarding
+      - name: Test remote forwarding (-R)
         run: |
           set -e
-          
-          echo "Running cmd/forwarding run.sh..."
+          echo "Running cmd/forwarding run-remote.sh..."
           export workspace=$(pwd)
-          
+
           cd cmd/forwarding
-          chmod +x run.sh
-          bash run.sh &
+          chmod +x run-remote.sh
+          bash run-remote.sh &
           RUN_PID=$!
-          echo "run.sh started with PID $RUN_PID"
+          echo "run-remote.sh started with PID $RUN_PID"
 
           sleep 5
           docker exec openssh-server_forwarding curl -vv http://127.0.0.1:8080
+
+          kill $RUN_PID 2>/dev/null || true
+
+      - name: Test local forwarding (-L)
+        run: |
+          set -e
+          echo "Running cmd/forwarding run-local.sh..."
+          export workspace=$(pwd)
+
+          cd cmd/forwarding
+          chmod +x run-local.sh
+          bash run-local.sh &
+          RUN_PID=$!
+          echo "run-local.sh started with PID $RUN_PID"
+
+          sleep 5
+          curl -sf http://127.0.0.1:2080 > /dev/null
+          echo "Local forwarding OK"
+
+          kill $RUN_PID 2>/dev/null || true
+
+      - name: Test SOCKS5 proxy (-D)
+        run: |
+          set -e
+          echo "Running cmd/forwarding run-socks5.sh..."
+          export workspace=$(pwd)
+
+          # 获取 Docker 网关 IP
+          GATEWAY_IP=$(docker exec openssh-server_forwarding ip route show default | awk '{print $3}')
+          echo "SOCKS5 target: $GATEWAY_IP:1080"
+
+          cd cmd/forwarding
+          chmod +x run-socks5.sh
+          bash run-socks5.sh &
+          RUN_PID=$!
+          echo "run-socks5.sh started with PID $RUN_PID"
+
+          sleep 5
+          curl -sf --socks5 127.0.0.1:3080 http://$GATEWAY_IP:1080 > /dev/null
+          echo "SOCKS5 proxy OK"
 
           kill $RUN_PID 2>/dev/null || true
 
