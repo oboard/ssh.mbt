@@ -410,3 +410,151 @@ test "roundtrip/name_list_via_writer_reader" {
   inspect(names[1], content="ssh-ed25519")
   inspect(names[2], content="ecdsa-sha2-nistp256")
 }
+
+// ============== write_mpint edge cases ==============
+
+///|
+test "writer/write_mpint_zero" {
+  // BigInt(0) → to_octets() 为空 → write_string(b"\x00")
+  let w = Writer::new()
+  w.write_mpint(@bigint.BigInt::from_int(0))
+  let buf = w.to_bytes()
+  // 长度字段 = 1，内容 = 0x00
+  inspect(decode_uint32(take_bytes(buf, 4)), content="1")
+  inspect(buf[4].to_int(), content="0")
+}
+
+///|
+test "writer/write_mpint_large_value" {
+  // 大数：65535 = 0xFFFF → 最高位为 1 → 前导补 0x00
+  let w = Writer::new()
+  w.write_mpint(@bigint.BigInt::from_int(65535))
+  let buf = w.to_bytes()
+  // 0xFFFF → 2 字节 + 1 字节前导 0 = 3 字节
+  inspect(decode_uint32(take_bytes(buf, 4)), content="3")
+  inspect(buf[4].to_int(), content="0") // padding
+  inspect(buf[5].to_int(), content="255") // 0xFF
+  inspect(buf[6].to_int(), content="255") // 0xFF
+}
+
+///|
+test "writer/write_mpint_256" {
+  // 256 = 0x0100 → 最高位为 0 → 无需补 0x00
+  let w = Writer::new()
+  w.write_mpint(@bigint.BigInt::from_int(256))
+  let buf = w.to_bytes()
+  inspect(decode_uint32(take_bytes(buf, 4)), content="2")
+  inspect(buf[4].to_int(), content="1") // 0x01
+  inspect(buf[5].to_int(), content="0") // 0x00
+}
+
+// ============== encode_mpint_of_bytes edge cases ==============
+
+///|
+test "encode_mpint_of_bytes/low_byte_first_no_pad" {
+  // 首字节 < 0x80 → 无需前导补 0x00
+  let bytes = Bytes::from_array([b'\x00', b'\x7f', b'\xff'])
+  let encoded = encode_mpint_of_bytes(bytes)
+  // 去掉前导 0 → [0x7f, 0xff]，首字节 0x7f < 0x80 → 无 padding
+  inspect(decode_uint32(take_bytes(encoded, 4)), content="2")
+  inspect(encoded[4].to_int(), content="127") // 0x7f
+  inspect(encoded[5].to_int(), content="255") // 0xff
+}
+
+///|
+test "encode_mpint_of_bytes/single_byte_low" {
+  // 单字节 < 0x80
+  let bytes = Bytes::from_array([b'\x42'])
+  let encoded = encode_mpint_of_bytes(bytes)
+  inspect(decode_uint32(take_bytes(encoded, 4)), content="1")
+  inspect(encoded[4].to_int(), content="66") // 0x42
+}
+
+///|
+test "encode_mpint_of_bytes/single_byte_high" {
+  // 单字节 >= 0x80 → 前导补 0x00
+  let bytes = Bytes::from_array([b'\x80'])
+  let encoded = encode_mpint_of_bytes(bytes)
+  inspect(decode_uint32(take_bytes(encoded, 4)), content="2")
+  inspect(encoded[4].to_int(), content="0") // padding
+  inspect(encoded[5].to_int(), content="128") // 0x80
+}
+
+// ============== Reader::read_bytes edge cases ==============
+
+///|
+test "reader/read_bytes_exact_length" {
+  // 读取全部字节
+  let r = Reader::new(Bytes::from_array([b'\x01', b'\x02', b'\x03']))
+  let b = r.read_bytes(3)
+  inspect(b.length(), content="3")
+  inspect(r.eof(), content="true")
+}
+
+///|
+test "reader/read_bytes_zero" {
+  // 读取 0 字节
+  let r = Reader::new(Bytes::from_array([b'\x01']))
+  let b = r.read_bytes(0)
+  inspect(b.length(), content="0")
+  inspect(r.remaining(), content="1")
+}
+
+// ============== bytes_to_utf8_string edge cases ==============
+
+///|
+test "bytes_to_utf8_string/ascii" {
+  // 纯 ASCII
+  let s = bytes_to_utf8_string(b"hello")
+  inspect(s, content="hello")
+}
+
+///|
+test "bytes_to_utf8_string/empty" {
+  let s = bytes_to_utf8_string(b"")
+  inspect(s, content="")
+}
+
+///|
+test "bytes_to_utf8_string/two_byte_chars" {
+  // 2 字节 UTF-8: 0xC3 0xA9 = é (U+00E9)
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\xc3', b'\xa9']))
+  // 长度应为 1 个字符
+  inspect(s.length(), content="1")
+}
+
+///|
+test "bytes_to_utf8_string/three_byte_chars" {
+  // 3 字节 UTF-8: 0xE4 0xB8 0xAD = 中 (U+4E2D)
+  let s = bytes_to_utf8_string(
+    Bytes::from_array([b'\xe4', b'\xb8', b'\xad']),
+  )
+  inspect(s.length(), content="1")
+  inspect(s, content="中")
+}
+
+///|
+test "bytes_to_utf8_string/mixed_ascii_and_multibyte" {
+  // "hi中" = h(1) + i(1) + 中(3) = 5 字节
+  let data = Bytes::from_array([
+    b'\x68', b'\x69', b'\xe4', b'\xb8', b'\xad',
+  ])
+  let s = bytes_to_utf8_string(data)
+  inspect(s, content="hi中")
+  inspect(s.length(), content="3")
+}
+
+///|
+test "bytes_to_utf8_string/continuation_byte_alone" {
+  // 单独的 continuation byte (0x80-0xBF) → 替换字符 U+FFFD
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\x80']))
+  // 应该产生替换字符，不崩溃
+  inspect(s.length() >= 1, content="true")
+}
+
+///|
+test "bytes_to_utf8_string/incomplete_two_byte" {
+  // 0xC3 后面没有 continuation byte → 替换字符
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\xc3']))
+  inspect(s.length() >= 1, content="true")
+}

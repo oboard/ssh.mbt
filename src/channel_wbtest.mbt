@@ -374,6 +374,29 @@ test "handle_inbound/request_exit_signal" {
 }
 
 ///|
+test "handle_inbound/request_unknown_type_is_ignored" {
+  // 98 + sender + "unknown-req-type" + want_reply + extra data
+  // 未知请求类型应被忽略（不崩溃，不改变状态）
+  let w = Writer::new()
+  w.write_byte(0x62) // MSG_CHANNEL_REQUEST
+  w.write_uint32(0) // sender
+  w.write_string_from_str("x11-req") // 未知的请求类型
+  w.write_byte(0) // want_reply
+  w.write_string_from_str("extra data here")
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  // 不应崩溃，exit_status 未设置
+  @debug.debug_inspect(ch.exit_status(), content="None")
+  // 不应改变通道状态
+  match ch.state() {
+    Closed => ()
+    _ => fail("expected Closed to be preserved")
+  }
+  // 无响应（want_reply=false 且未知类型不回复）
+  inspect(responses.length(), content="0")
+}
+
+///|
 test "handle_inbound/channel_success_is_ignored" {
   // 99 (CHANNEL_SUCCESS)
   let payload = Bytes::from_array([b'\x63'])

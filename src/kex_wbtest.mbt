@@ -619,3 +619,67 @@ test "kex/kex_random_bytes_length" {
   let b0 = kex_random_bytes(0)
   inspect(b0.length(), content="0")
 }
+
+// ============== kdf multi-round (i > 0 branch) ==============
+
+///|
+test "kex/derive_keys_needs_multi_round_kdf" {
+  // 当 requested key length > single hash output 时，kdf 循环多次
+  // SHA-256 输出 32 字节；请求 48 字节 → 需要 2 轮
+  let session_id = Bytes::make(32, b'\xcc')
+  let h = Bytes::make(32, b'\xdd')
+  let k = Bytes::from_array([b'\x00', b'\xee'])
+
+  let (iv_c2s, iv_s2c, ek_c2s, ek_s2c, mk_c2s, mk_s2c) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k, session_id, 48, 48, 48,
+  ) catch {
+    e => fail("derive_keys multi-round: \{to_repr(e)}")
+  }
+  // 所有派生密钥应为请求的 48 字节
+  inspect(iv_c2s.length(), content="48")
+  inspect(iv_s2c.length(), content="48")
+  inspect(ek_c2s.length(), content="48")
+  inspect(ek_s2c.length(), content="48")
+  inspect(mk_c2s.length(), content="48")
+  inspect(mk_s2c.length(), content="48")
+  // 不同用途的密钥应不同
+  let mut diff = false
+  for i in 0..<iv_c2s.length() {
+    if iv_c2s[i] != ek_c2s[i] {
+      diff = true
+    }
+  }
+  inspect(diff, content="true")
+}
+
+///|
+test "kex/derive_keys_exact_hash_length" {
+  // requested length == hash output (32) → 单轮，无截断
+  let session_id = Bytes::make(32, b'\x11')
+  let h = Bytes::make(32, b'\x22')
+  let k = Bytes::from_array([b'\x00', b'\x33'])
+
+  let (iv, _, _, _, _, _) = derive_keys(
+    @crypto.Algorithm::sha256(), h, k, session_id, 32, 32, 32,
+  ) catch {
+    e => fail("derive_keys exact: \{to_repr(e)}")
+  }
+  inspect(iv.length(), content="32")
+}
+
+///|
+test "kex/derive_keys_sha1" {
+  // SHA-1 输出 20 字节
+  let session_id = Bytes::make(20, b'\x44')
+  let h = Bytes::make(20, b'\x55')
+  let k = Bytes::from_array([b'\x00', b'\x66'])
+
+  let (iv, ek, _, _, mk, _) = derive_keys(
+    @crypto.Algorithm::sha1(), h, k, session_id, 16, 16, 20,
+  ) catch {
+    e => fail("derive_keys sha1: \{to_repr(e)}")
+  }
+  inspect(iv.length(), content="16")
+  inspect(ek.length(), content="16")
+  inspect(mk.length(), content="20")
+}

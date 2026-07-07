@@ -220,3 +220,236 @@ test "host_key_decision/reason_string" {
     content="h (alg=alg): rejected by user callback",
   )
 }
+
+// ============== KnownHost getters ==============
+
+///|
+test "known_host/alg_returns_key_alg" {
+  let entry : KnownHost = {
+    patterns: ["example.com"],
+    key_alg: "ssh-ed25519",
+    key: Bytes::from_array([b'\x01', b'\x02']),
+  }
+  inspect(entry.alg(), content="ssh-ed25519")
+}
+
+///|
+test "known_host/key_bytes_returns_key" {
+  let entry : KnownHost = {
+    patterns: ["example.com"],
+    key_alg: "ssh-rsa",
+    key: Bytes::from_array([b'\xab', b'\xcd', b'\xef']),
+  }
+  let kb = entry.key_bytes()
+  inspect(kb.length(), content="3")
+  inspect(kb[0].to_int(), content="171") // 0xab
+  inspect(kb[2].to_int(), content="239") // 0xef
+}
+
+// ============== KnownHost::format_entry ==============
+
+///|
+test "known_host/format_entry_single_pattern" {
+  let entry : KnownHost = {
+    patterns: ["example.com"],
+    key_alg: "ssh-ed25519",
+    key: Bytes::from_array([b'\x00', b'\x01']),
+  }
+  let formatted = entry.format_entry()
+  // 应包含 pattern、算法名和 base64 编码的 key
+  inspect(formatted.has_prefix("example.com ssh-ed25519 "), content="true")
+}
+
+///|
+test "known_host/format_entry_multiple_patterns" {
+  let entry : KnownHost = {
+    patterns: ["host1.com", "host2.com"],
+    key_alg: "ssh-rsa",
+    key: Bytes::from_array([b'\xff']),
+  }
+  let formatted = entry.format_entry()
+  inspect(formatted.has_prefix("host1.com,host2.com ssh-rsa "), content="true")
+}
+
+// ============== KnownHost::matches with non-22 port ==============
+
+///|
+test "known_host/matches_non_22_port" {
+  // 非 22 端口应匹配 [host]:port 格式
+  let entry : KnownHost = {
+    patterns: ["[example.com]:2222"],
+    key_alg: "ssh-rsa",
+    key: b"k",
+  }
+  // 端口 2222 匹配
+  inspect(entry.matches("example.com", 2222), content="true")
+  // 端口 22 不匹配（pattern 是 [host]:2222）
+  inspect(entry.matches("example.com", 22), content="false")
+  // 不同主机不匹配
+  inspect(entry.matches("other.com", 2222), content="false")
+}
+
+///|
+test "known_host/matches_non_22_fallback_to_plain_host" {
+  // 当 pattern 不含端口时，也应匹配非 22 端口的主机名
+  let entry : KnownHost = {
+    patterns: ["example.com"],
+    key_alg: "ssh-rsa",
+    key: b"k",
+  }
+  // 端口 2222，pattern 是 "example.com" 无端口，应 fallback 匹配 host
+  inspect(entry.matches("example.com", 2222), content="true")
+  // 端口 22 也匹配
+  inspect(entry.matches("example.com", 22), content="true")
+}
+
+///|
+test "known_host/matches_wildcard_with_port" {
+  let entry : KnownHost = {
+    patterns: ["*.example.com"],
+    key_alg: "ssh-rsa",
+    key: b"k",
+  }
+  inspect(entry.matches("foo.example.com", 22), content="true")
+  inspect(entry.matches("foo.example.com", 2222), content="true")
+  inspect(entry.matches("bar.com", 22), content="false")
+}
+
+// ============== host_pattern_for ==============
+
+///|
+test "known_host/host_pattern_for_port_22" {
+  let pat = host_pattern_for("example.com", 22)
+  inspect(pat, content="example.com")
+}
+
+///|
+test "known_host/host_pattern_for_non_22" {
+  let pat = host_pattern_for("example.com", 2222)
+  inspect(pat, content="[example.com]:2222")
+}
+
+///|
+test "known_host/host_pattern_for_various_ports" {
+  inspect(host_pattern_for("h", 80), content="[h]:80")
+  inspect(host_pattern_for("h", 443), content="[h]:443")
+  inspect(host_pattern_for("h", 22), content="h")
+}
+
+// ============== parse_line edge cases ==============
+
+///|
+test "parse_line/comment_returns_none" {
+  let result = parse_line("# this is a comment")
+  inspect(result is None, content="true")
+}
+
+///|
+test "parse_line/empty_returns_none" {
+  let result = parse_line("")
+  inspect(result is None, content="true")
+}
+
+///|
+test "parse_line/whitespace_only_returns_none" {
+  let result = parse_line("   ")
+  inspect(result is None, content="true")
+}
+
+///|
+test "parse_line/too_few_parts_returns_none" {
+  // 只有 2 个字段（缺少 key）
+  let result = parse_line("example.com ssh-rsa")
+  inspect(result is None, content="true")
+}
+
+///|
+test "parse_line/valid_entry" {
+  // 构造一个有效的 known_hosts 行
+  let key_bytes = Bytes::from_array([b'\x00', b'\x01', b'\x02'])
+  let key_b64 = encode_base64(key_bytes)
+  let line = "example.com ssh-ed25519 \{key_b64}"
+  let result = parse_line(line)
+  match result {
+    Some(entry) => {
+      inspect(entry.patterns.length(), content="1")
+      inspect(entry.patterns[0], content="example.com")
+      inspect(entry.key_alg, content="ssh-ed25519")
+      inspect(entry.key.length(), content="3")
+    }
+    None => fail("expected Some(KnownHost)")
+  }
+}
+
+///|
+test "parse_line/multiple_hosts" {
+  let key_bytes = Bytes::from_array([b'\xaa'])
+  let key_b64 = encode_base64(key_bytes)
+  let line = "host1.com,host2.com ssh-rsa \{key_b64}"
+  let result = parse_line(line)
+  match result {
+    Some(entry) => {
+      inspect(entry.patterns.length(), content="2")
+      inspect(entry.patterns[0], content="host1.com")
+      inspect(entry.patterns[1], content="host2.com")
+    }
+    None => fail("expected Some(KnownHost)")
+  }
+}
+
+// ============== encode_base64 / decode_base64 roundtrip ==============
+
+///|
+test "base64/roundtrip_short" {
+  let original = Bytes::from_array([b'\x00', b'\xff', b'\x7f', b'\x80'])
+  let encoded = encode_base64(original)
+  let decoded = decode_base64(encoded) catch {
+    e => fail("decode_base64: \{to_repr(e)}")
+  }
+  inspect(decoded.length(), content="4")
+  inspect(decoded[0].to_int(), content="0")
+  inspect(decoded[1].to_int(), content="255")
+  inspect(decoded[2].to_int(), content="127")
+  inspect(decoded[3].to_int(), content="128")
+}
+
+///|
+test "base64/roundtrip_empty" {
+  let encoded = encode_base64(b"")
+  let decoded = decode_base64(encoded) catch {
+    e => fail("decode_base64 empty: \{to_repr(e)}")
+  }
+  inspect(decoded.length(), content="0")
+}
+
+///|
+test "base64/roundtrip_longer" {
+  let original = Bytes::from_array([
+    b'\x01', b'\x02', b'\x03', b'\x04', b'\x05', b'\x06',
+  ])
+  let encoded = encode_base64(original)
+  let decoded = decode_base64(encoded) catch {
+    e => fail("decode_base64 longer: \{to_repr(e)}")
+  }
+  let mut same = true
+  for i in 0..<original.length() {
+    if original[i] != decoded[i] {
+      same = false
+    }
+  }
+  inspect(same, content="true")
+}
+
+///|
+test "base64/decode_ignores_whitespace" {
+  let original = Bytes::from_array([b'\xab', b'\xcd'])
+  let encoded = encode_base64(original)
+  // 插入空格和换行
+  let with_spaces = "\{encoded} \n \r"
+  let decoded = decode_base64(with_spaces) catch {
+    e => fail("decode_base64 spaces: \{to_repr(e)}")
+  }
+  inspect(decoded.length(), content="2")
+  inspect(decoded[0].to_int(), content="171") // 0xab
+  inspect(decoded[1].to_int(), content="205") // 0xcd
+}
