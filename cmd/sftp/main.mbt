@@ -14,6 +14,7 @@ fn main {
   }
 
   let (opts, password, command, paths) = parse_args(argv)
+  let opts = opts.with_insecure_host_key()
   let client = @src.Client::connect(opts) catch {
     e => abort("connect: \{to_repr(e)}")
   }

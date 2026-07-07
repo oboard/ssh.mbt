@@ -38,7 +38,7 @@ docker run -d \
   -e PGID=1000 \
   -e TZ=Etc/UTC \
   -e PASSWORD_ACCESS=true \
-  -e USER_PASSWORD="$password" \
+  -e USER_PASSWORD="$MSSH_PASSWORD" \
   -e SUDO_ACCESS=true \
   -e USER_NAME=admin \
   -p 5022:2222 \

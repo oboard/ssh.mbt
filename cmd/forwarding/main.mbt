@@ -19,7 +19,8 @@ fn main {
     abort("no arguments")
   }
   let parsed = parse_args(argv)
-  let client = @src.Client::connect(parsed.opts) catch {
+  let opts = parsed.opts.with_insecure_host_key()
+  let client = @src.Client::connect(opts) catch {
     e => abort("connect: \{to_repr(e)}")
   }
   defer client.close()
