@@ -4,7 +4,9 @@
 
 - 协议层完全 MoonBit 原创
 - 密码学原语通过 FFI 复用系统 OpenSSL `libcrypto`，不重复造轮子
-- TCP 传输层使用自带的 Winsock/POSIX socket FFI（不依赖 MSVC/异步运行时）
+- TCP 传输层使用 socket FFI：
+  - **Windows**：Winsock socket FFI（不依赖 MSVC）
+  - **POSIX（Linux / macOS）**：POSIX socket FFI
 
 ## 1. 项目状态
 
@@ -15,7 +17,7 @@
 | 包二进制编解码 | ✅ | `src/packet.mbt`：length / padding / payload / MAC（EtM 流加密模式） |
 | KEXINIT 协商 | ✅ | `src/kex.mbt`：`ecdh-sha2-nistp256` / `diffie-hellman-group14-sha256` / `diffie-hellman-group14-sha1` |
 | 密钥派生 | ✅ | RFC 4253 §7.2 派生（`derive_keys()`），HMAC-SHA-1/256 扩展 |
-| 主机密钥验证 | ✅ | `ssh-rsa` / `rsa-sha2-256` / `ssh-dss` / `ecdsa-sha2-nistp256/384/521` / `ssh-ed25519` |
+| 主机密钥验证 | ✅ | `ssh-rsa` / `rsa-sha2-256` / `rsa-sha2-512` / `ssh-dss` / `ecdsa-sha2-nistp256/384/521` / `ssh-ed25519` |
 | 密码认证 | ✅ | `Client::auth_password()` 完整流程 |
 | 公钥认证 | ✅ | `Client::auth_publickey()`（two-step 查询 + 签名）；私钥支持 RSA / Ed25519 / DSA / ECDSA；公钥文件必须是 OpenSSH 单行格式 |
 | keyboard-interactive 认证 | ✅ | `Client::auth_keyboard_interactive()` |
@@ -25,9 +27,8 @@
 | `known_hosts` 解析 | ✅ | 基础解析 + 通配符；HMAC-SHA1 哈希形式（`\|1\|…`）待支持 |
 | SFTP | ✅ | SFTP v3 协议实现（`src/sftp.mbt`）|
 | 远程端口转发 (-R) | ✅ | `Client::forward_remote_port()` — `tcpip-forward` 全局请求 + `forwarded-tcpip` 通道 |
-| 本地端口转发 (-L) | 待验证 | `Client::forward_local_port()` — `direct-tcpip` 通道 |
-| SOCKS5 动态转发 (-D) | 待验证 | `Client::forward_socks5()` — SOCKS5 代理（IPv4 + 域名）|
-| X11 转发 | 未实现 | - |
+| 本地端口转发 (-L) | ✅ | `Client::forward_local_port()` — `direct-tcpip` 通道（双向 `relay_data` 中继） |
+| SOCKS5 动态转发 (-D) | ✅ | `Client::forward_socks5()` — SOCKS5 代理 |
 
 ## 2. 架构
 
@@ -189,7 +190,7 @@ moonbit-ssh-client/
 │   ├── password/                密码认证（auth_auto）
 │   ├── key/                     Ed25519/RSA/ECDSA 公钥认证
 │   ├── sftp/                    SFTP 文件传输客户端（ls/get/put/rm/mkdir/rmdir/stat）
-│   └── forwarding/              端口转发（-L / -R / -D）
+│   └── forwarding/              端口转发（-L / -R / -D），三个独立 run-*.sh
 ├── docs/
 │   ├── prd_000.md                       设计 PRD
 │   ├── prd_001_ssh-key-types-support-plan.md   密钥类型扩展计划
@@ -229,6 +230,11 @@ pacman -S mingw-w64-ucrt-x86_64-openssl
 Linux
 ```bash
 apt-get install -y gcc libssl-dev
+```
+
+macOS：
+```bash
+brew install gcc openssl
 ```
 
 ### 4.2 启动测试 sshd
@@ -319,22 +325,42 @@ cd cmd/sftp
 
 #### 4.3.4 端口转发
 
-端口转发通过 `cmd/forwarding/` 入口，使用 `-L` / `-R` / `-D` 参数区分模式：
+端口转发通过 `cmd/forwarding/` 入口；每种模式对应一个独立 `run-*.sh` 脚本：
 
 ```bash
 # 前置：bash scripts/ssh-server/forwarding.sh
-#   （启动 sshd 5022→2222，并把 1080 端口绑定到 nginx 作为目标；
-#    同时配置 AllowTcpForwarding=yes / GatewayPorts=no / PermitOpen=any）
+#   （启动 sshd 5022→2222，并把 1080 端口绑定到 nginx 作为统一目标；
+#    同时配置 AllowTcpForwarding=yes / GatewayPorts=yes / PermitOpen=any）
 cd cmd/forwarding
 
-# 远程转发 (-R)：远端 8080 → 通过 SSH → 本地 localhost:1080 (nginx)
-./run.sh
+# 1. 远程转发 (-R)：远端 8080 → SSH 隧道 → 本地 localhost:1080 (nginx)
+./run-remote.sh
 # 内部默认：
 #   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -R 8080:localhost:1080 --password $MSSH_PASSWORD"
 #   moon clean && moon run . --target native
 # 验证（在 sshd 容器内）：
 #   docker exec openssh-server_forwarding curl http://127.0.0.1:8080
+
+# 2. 本地转发 (-L)：本地 2080 → SSH 隧道 → 远端 gateway:1080 (宿主机 nginx)
+./run-local.sh
+# 内部默认：
+#   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -L 2080:$GATEWAY_IP:1080 --password $MSSH_PASSWORD"
+# 验证（在宿主机）：
+#   curl http://127.0.0.1:2080
+
+# 3. SOCKS5 动态代理 (-D)：本地 SOCKS5:3080 → SSH 隧道 → 任意远端目标
+./run-socks5.sh
+# 内部默认：
+#   export MOONBIT_CLI_ARGS="$MSSH_USERNAME@$MSSH_HOST --port $MSSH_PORT -D 3080 --password $MSSH_PASSWORD"
+# 验证（在宿主机，通过 SOCKS5 访问远端 nginx）：
+#   curl --socks5 127.0.0.1:3080 http://$GATEWAY_IP:1080
 ```
+
+> **实现要点：**
+> - 三种模式都共用一个 `relay_data()` 双向中继实现（`select`-style 轮询，避免阻塞任一方向）。
+> - SOCKS5 当前仅支持 IPv4（`ATYP=0x01`）与域名（`ATYP=0x03`），IPv6（`ATYP=0x04`）直接返回 `0x08` 并关闭。
+> - `relay_data` 内部把 channel 的 `data_sink` 切到 `Socket(local_socket)` 模式，绕开 `Buffer` 缓冲。
+> - 集成测试在 `.github/workflows/integration.yml` 中跑全：依次 `run-remote.sh` → `run-local.sh` → `run-socks5.sh`。
 
 ## 5. 核心模块
 
@@ -399,7 +425,7 @@ KEX 阶段在收到服务端公钥时根据策略产出 `HostKeyDecision`：
 | `Client::connect(opts) -> Client raise SshError` | TCP 连接 + banner 交换 |
 | `Client::kex() -> Unit raise SshError` | 完整 KEX（KEXINIT → DH/ECDH → NEWKEYS → 安装加密） |
 | `Client::auth_password(pwd) -> Unit raise SshError` | 密码认证 |
-| `Client::auth_publickey(key_path) -> Unit raise SshError` | 公钥认证（two-step），自动适配 `ssh-rsa` / `rsa-sha2-256` / `ssh-ed25519` / `ecdsa-sha2-nistp256/384/521` / `ssh-dss` |
+| `Client::auth_publickey(key_path) -> Unit raise SshError` | 公钥认证（two-step），自动适配 `ssh-rsa` / `rsa-sha2-256` / `rsa-sha2-512` / `ssh-ed25519` / `ecdsa-sha2-nistp256/384/521` / `ssh-dss` |
 | `Client::auth_keyboard_interactive(answer_fn) -> Unit raise SshError` | keyboard-interactive 认证 |
 | `Client::auth_auto(pwd, key_path?) -> Unit raise SshError` | none → publickey → kbd-int → password 自动回退 |
 | `Client::open_session() -> Channel` | 创建本地 channel（id 自增） |
@@ -541,15 +567,15 @@ moon coverage analyze > uncovered.log
 | **v0.1** | 协议骨架：packet / kex 状态机 / auth（密码 + 公钥 + kbd-int + auto）/ channel / crypto FFI / 自带 socket FFI | ✅ 已发布 |
 | **v0.2** | SFTP 协议 | ✅ 已发布 |
 | **v0.3** | 端口转发（remote） | ✅ 已发布 |
-| **v0.4** | 端口转发（local / SOCKS5） | 📋 待开发 |
+| **v0.4** | 端口转发（local / SOCKS5） | ✅ 已发布 |
 | **v0.5** | shell 交互式 I/O / pty-req 对接 | 📋 待开发 |
+| **v0.6** | X11 转发（`x11-req` + `x11` 通道，RFC 4254 §6.3.2） | 📋 待开发 |
 
 **进展：**
-- [ ] 端口转发：`forward_local_port` / `forward_socks5`
-- [ ] SOCKS5 握手：IPv4 + 域名；不支持 IPv6
 - [ ] shell 交互（stdin/stdout 转发）
 - [ ] `Client::exec_pty()` 高层封装（`build_channel_request_pty` 已就绪）
-- [ ] macOS 验证（当前仅 Linux + Windows MinGW 经过测试）
+- [ ] X11 转发（`x11-req` 全局请求 + `x11` 通道类型 + `X11FakeCookie` / `MIT-MAGIC-COOKIE-1` 协议）
+- [ ] HMAC-SHA1 形式的 known_hosts 条目（`|1|…`）
 
 ## 8. 跨平台注意
 
@@ -557,7 +583,7 @@ moon coverage analyze > uncovered.log
 |------|------|------|------|
 | Linux glibc | ✅ | ✅ | 完全支持 |
 | Windows MinGW (Winsock2) | ✅ | ✅ | 完全支持 |
-| macOS | - | - | 待测试验证 |
+| macOS | ✅ | ✅ | 完全支持 |
 
 ## 9. 引用
 
