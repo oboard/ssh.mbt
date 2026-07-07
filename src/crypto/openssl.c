@@ -174,21 +174,45 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
   if (*major < 1 || (*major == 1 && (*minor < 1 || (*minor == 1 && *fix < 1)))) return 3;
 #define IMPORT_FUNC(ret, func, params) \
   func = (ret (*) params)GetProcAddress(handle, "" #func ""); \
-  if (!func) return 4;
+  if (!func) { fprintf(stderr, "openssl_loader: missing symbol %s\n", "" #func ""); return 4; }
   IMPORTED_OPEN_SSL_FUNCTIONS
 #undef IMPORT_FUNC
 #else
   void *handle = 0;
 #ifdef __MACH__
-  handle = dlopen("/usr/lib/libcrypto.44.dylib", RTLD_LAZY);
-  if (!handle) handle = dlopen("/usr/lib/libcrypto.46.dylib", RTLD_LAZY);
-  if (!handle) handle = dlopen("/usr/lib/libcrypto.dylib", RTLD_LAZY);
+  /* macOS: try Homebrew OpenSSL (3.x) first — Apple ships LibreSSL in
+   * /usr/lib which lacks the OpenSSL 3.x symbols we need. */
+  static const char *mac_paths[] = {
+    "/opt/homebrew/opt/openssl/lib/libcrypto.3.dylib",
+    "/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib",
+    "/usr/local/opt/openssl/lib/libcrypto.3.dylib",
+    "/usr/local/opt/openssl@3/lib/libcrypto.3.dylib",
+    "/opt/homebrew/lib/libcrypto.3.dylib",
+    "/usr/local/lib/libcrypto.3.dylib",
+    "libcrypto.3.dylib",
+    /* Last resort: Apple-shipped LibreSSL. Many of our required OpenSSL 3.x
+     * symbols will be missing here, so this typically fails the version-3
+     * check, but we try anyway for completeness. */
+    "/usr/lib/libcrypto.dylib",
+    0
+  };
+  for (int i = 0; mac_paths[i]; i++) {
+    handle = dlopen(mac_paths[i], RTLD_LAZY);
+    if (handle) break;
+  }
 #else
   handle = dlopen("libcrypto.so.3", RTLD_NOW);
   if (!handle) handle = dlopen("libcrypto.so.1.1", RTLD_NOW);
   if (!handle) handle = dlopen("libcrypto.so", RTLD_NOW);
 #endif
-  if (!handle) return 1;
+  if (!handle) {
+    fprintf(stderr, "openssl_loader: failed to dlopen libcrypto (paths tried");
+#ifdef __MACH__
+    for (int i = 0; mac_paths[i]; i++) fprintf(stderr, ", %s", mac_paths[i]);
+#endif
+    fprintf(stderr, ")\n");
+    return 1;
+  }
   unsigned long (*OPENSSL_version_num_fn)() = dlsym(handle, "OpenSSL_version_num");
   if (!OPENSSL_version_num_fn) return 2;
   unsigned long version = (*OPENSSL_version_num_fn)();
@@ -198,7 +222,7 @@ int moonbitlang_ssh_load_openssl(int *major, int *minor, int *fix) {
   if (*major < 1 || (*major == 1 && (*minor < 1 || (*minor == 1 && *fix < 1)))) return 3;
 #define IMPORT_FUNC(ret, func, params) \
   func = dlsym(handle, "" #func ""); \
-  if (!func) return 4;
+  if (!func) { fprintf(stderr, "openssl_loader: missing symbol %s\n", "" #func ""); return 4; }
   IMPORTED_OPEN_SSL_FUNCTIONS
 #undef IMPORT_FUNC
 #endif
