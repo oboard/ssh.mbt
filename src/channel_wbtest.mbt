@@ -227,13 +227,19 @@ test "handle_inbound/open_failure_captures_reason_and_message" {
   let ch = Channel::new(1)
   let _ = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
   @debug.debug_inspect(ch.open_failure_reason(), content="Some(2)")
-  @debug.debug_inspect(ch.open_failure_message(), content="Some(\"connect failed\")")
+  @debug.debug_inspect(
+    ch.open_failure_message(),
+    content="Some(\"connect failed\")",
+  )
 }
 
 ///|
 test "open_failure_reason_name/maps_known_codes" {
   // RFC 4254 §5.1 定义的四个 reason code 应映射到常量名
-  inspect(open_failure_reason_name(1), content="SSH_OPEN_ADMINISTRATIVELY_PROHIBITED")
+  inspect(
+    open_failure_reason_name(1),
+    content="SSH_OPEN_ADMINISTRATIVELY_PROHIBITED",
+  )
   inspect(open_failure_reason_name(2), content="SSH_OPEN_CONNECT_FAILED")
   inspect(open_failure_reason_name(3), content="SSH_OPEN_UNKNOWN_CHANNEL_TYPE")
   inspect(open_failure_reason_name(4), content="SSH_OPEN_RESOURCE_SHORTAGE")

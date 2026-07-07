@@ -167,6 +167,8 @@ pub fn method_password() -> String
 
 pub fn method_publickey() -> String
 
+pub fn open_failure_reason_name(Int) -> String
+
 pub fn parse_auth_reply(Bytes) -> AuthReply raise SshError
 
 pub fn parse_dh_reply_payload(Bytes) -> DhReply raise SshError
@@ -250,6 +252,8 @@ pub struct Channel {
   mut exit_signal : String?
   mut channel_type : ChannelType
   mut data_sink : DataSink
+  mut open_failure_reason : Int?
+  mut open_failure_message : String?
   // private fields
 }
 pub fn Channel::exit_status(Self) -> Int?
@@ -258,6 +262,8 @@ pub fn Channel::has_stdout(Self) -> Bool
 pub fn Channel::id(Self) -> Int
 pub fn Channel::is_open(Self) -> Bool
 pub fn Channel::new(Int) -> Self
+pub fn Channel::open_failure_message(Self) -> String?
+pub fn Channel::open_failure_reason(Self) -> Int?
 pub fn Channel::peer_id(Self) -> Int
 pub fn Channel::state(Self) -> ChannelState
 pub fn Channel::take_stderr(Self) -> String
