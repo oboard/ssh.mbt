@@ -73,6 +73,8 @@ pub const SSH_MSG_KEX_ECDH_REPLY : Byte = b'\x1f'
 
 pub const SSH_MSG_NEWKEYS : Byte = b'\x15'
 
+pub fn accept_and_persist(String, String, Bytes) -> Bool
+
 pub fn build_channel_close(Int) -> Bytes
 
 pub fn build_channel_data(Int, Bytes) -> Bytes
@@ -185,7 +187,11 @@ pub fn parse_signature_blob(Bytes) -> SignatureBlob raise SshError
 
 pub fn read_packet((Int) -> Bytes raise SshError, Int, (Bytes) -> Bytes raise SshError, (Bytes, Bytes) -> Unit raise SshError) -> Bytes raise SshError
 
+pub fn reject_unknown(String, String, Bytes) -> Bool
+
 pub fn server_host_key_algorithms() -> Array[String]
+
+pub fn verify_host_key(HostKeyPolicy, String, Int, String, Bytes) -> HostKeyDecision
 
 pub fn write_packet(Bytes, Int, Bool, (Bytes) -> Bytes raise SshError) -> Bytes raise SshError
 
@@ -298,11 +304,14 @@ pub struct ConnectOptions {
   port : Int
   user : String
   client_banner : String?
-  accept_host_key : (String, Bytes) -> Bool
+  host_key_policy : HostKeyPolicy
   timeout_ms : Int
 }
 pub fn ConnectOptions::new(String, Int, String) -> Self
 pub fn ConnectOptions::with_host_key_verifier(Self, (String, Bytes) -> Bool) -> Self
+pub fn ConnectOptions::with_insecure_host_key(Self) -> Self
+pub fn ConnectOptions::with_strict_host_key_check(Self, String) -> Self raise SshError
+pub fn ConnectOptions::with_trust_on_first_use(Self, String, (String, String, Bytes) -> Bool) -> Self raise SshError
 
 pub enum DataSink {
   Buffer
@@ -330,6 +339,21 @@ pub struct EcdhReply {
   signature : Bytes
 }
 
+pub enum HostKeyDecision {
+  Accept
+  RejectMismatch(String, Bytes)
+  RejectUnknown
+  RejectByUser
+}
+pub fn HostKeyDecision::reason(Self, String, String) -> String
+
+pub enum HostKeyPolicy {
+  Strict(Array[KnownHost], (String, String, Bytes) -> Bool)
+  TrustOnFirstUse(Array[KnownHost], (String, String, Bytes) -> Bool)
+  Insecure
+  Callback((String, Bytes) -> Bool)
+}
+
 pub struct KexContext {
   mut state : KexState
   mut kex_alg : String
@@ -349,7 +373,7 @@ pub struct KexContext {
   mut session_id_set : Bool
 }
 pub fn KexContext::derive_session_keys(Self) -> DerivedKeys raise SshError
-pub fn KexContext::drive(Self, () -> Bytes raise SshError, (Bytes) -> Unit raise SshError, (String, Bytes) -> Bool) -> Unit raise SshError
+pub fn KexContext::drive(Self, () -> Bytes raise SshError, (Bytes) -> Unit raise SshError, (String, Bytes) -> Unit raise SshError) -> Unit raise SshError
 pub fn KexContext::new(Bytes, Bytes) -> Self
 
 pub struct KexInit {

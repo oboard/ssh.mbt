@@ -9,12 +9,19 @@ pub struct ConnectOptions {
   port : Int
   user : String
   client_banner : String?
-  accept_host_key : (String, Bytes) -> Bool
+  host_key_policy : HostKeyPolicy
   timeout_ms : Int
 }
 
 ///|
-/// 创建默认连接参数。host key 验证默认接受所有主机。
+/// 创建默认连接参数。
+///
+/// host key 校验策略默认为 **Strict 且无条目**——这意味着默认行为是
+/// **拒绝所有未知主机**。要允许连接，请显式调用以下之一：
+///
+/// - `with_strict_host_key_check(content)`
+/// - `with_trust_on_first_use(content, prompt)`
+/// - `with_insecure_host_key()`（不推荐）
 pub fn ConnectOptions::new(
   host : String,
   port : Int,
@@ -25,27 +32,69 @@ pub fn ConnectOptions::new(
     port,
     user,
     client_banner: None,
-    accept_host_key: (_alg, _key) => true,
+    host_key_policy: Strict([], reject_unknown),
     timeout_ms: 30_000,
   }
 }
 
 ///|
-/// 设置 host key 验证回调。回调接收 `(algorithm_name, host_key_blob)`，返回是否接受。
+/// 设置 host key 校验为 **Strict 模式**，加载指定 known_hosts 内容。
+/// 未在 entries 中的主机一律拒绝（除非 `on_unknown` 允许）。
+/// 调用方负责读取 known_hosts 文件内容（例如通过 `@fs` 或外部 FFI），
+/// 本库保持纯协议层、无文件系统依赖。
+pub fn ConnectOptions::with_strict_host_key_check(
+  self : ConnectOptions,
+  known_hosts_content : String,
+) -> ConnectOptions raise SshError {
+  let entries = parse_file(known_hosts_content)
+  { ..self, host_key_policy: Strict(entries, reject_unknown) }
+}
+
+///|
+/// 设置 host key 校验为 **Trust On First Use**：
+/// 首次连接由 `prompt(host, alg, key) -> Bool` 决定是否接受并持久化；
+/// 之后按 Strict 行为校验。
+pub fn ConnectOptions::with_trust_on_first_use(
+  self : ConnectOptions,
+  known_hosts_content : String,
+  prompt : (String, String, Bytes) -> Bool,
+) -> ConnectOptions raise SshError {
+  let entries = parse_file(known_hosts_content)
+  { ..self, host_key_policy: TrustOnFirstUse(entries, prompt) }
+}
+
+///|
+/// 跳过 host key 校验。**仅用于受信任内网或本地回环测试**。
+pub fn ConnectOptions::with_insecure_host_key(
+  self : ConnectOptions,
+) -> ConnectOptions {
+  { ..self, host_key_policy: Insecure }
+}
+
+///|
+/// 用自定义 `(alg, key) -> Bool` 回调完全接管 host key 校验。
+/// 返回 `true` 接受；返回 `false` 时抛出 [HostKeyMismatch]。
+///
+/// 与 [with_strict_host_key_check] / [with_trust_on_first_use] 的区别：
+/// 此方法不依赖 [KnownHost] 列表，把校验逻辑全部交给回调，
+/// 适用于需要自定义指纹格式、对接外部 HSM / Trust Store
+/// 或集成非 OpenSSH known_hosts 实现的场景。
 pub fn ConnectOptions::with_host_key_verifier(
   self : ConnectOptions,
   f : (String, Bytes) -> Bool,
 ) -> ConnectOptions {
-  { ..self, accept_host_key: f }
+  { ..self, host_key_policy: Callback(f) }
 }
 
 ///|
 /// SSH 客户端。组装 KEX / auth / channel / 加密层，提供完整 SSH 连接能力。
 pub struct Client {
   priv conn : ClientConn
+  priv host : String
+  priv port : Int
   priv kex : KexContext
   priv auth : AuthContext
-  priv accept_host_key : (String, Bytes) -> Bool
+  priv host_key_policy : HostKeyPolicy
   priv mut session_id : Bytes
   mut next_channel_id : Int
   priv mut encrypted : Bool
@@ -97,9 +146,11 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
   let auth = AuthContext::new(opts.user)
   {
     conn: Connected(conn),
+    host: opts.host,
+    port: opts.port,
     kex,
     auth,
-    accept_host_key: opts.accept_host_key,
+    host_key_policy: opts.host_key_policy,
     session_id: b"",
     next_channel_id: 0,
     encrypted: false,
@@ -115,10 +166,30 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
 ///|
 /// 执行密钥交换。
 pub fn Client::kex(self : Client) -> Unit raise SshError {
+  let policy = self.host_key_policy
+  let host = self.host
+  let port = self.port
+  let verify : (String, Bytes) -> Unit raise SshError = (alg, key) => {
+    match verify_host_key(policy, host, port, alg, key) {
+      Accept => ()
+      RejectMismatch(stored_alg, _) =>
+        raise HostKeyMismatch(
+          "\{host}:\{port} (alg=\{alg}): key changed, stored=\{stored_alg} — possible MITM",
+        )
+      RejectUnknown =>
+        raise HostKeyMismatch(
+          "\{host}:\{port} (alg=\{alg}): not in known_hosts and policy rejects unknown hosts",
+        )
+      RejectByUser =>
+        raise HostKeyMismatch(
+          "\{host}:\{port} (alg=\{alg}): rejected by user callback",
+        )
+    }
+  }
   self.kex.drive(
     () => self.read_plain_packet(),
     payload => self.write_plain_packet(payload),
-    self.accept_host_key,
+    verify,
   )
   self.session_id = self.kex.session_id
   let keys = self.kex.derive_session_keys()

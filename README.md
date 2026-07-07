@@ -346,24 +346,51 @@ pub struct ConnectOptions {
   port : Int
   user : String
   client_banner : String?                  // 默认 "SSH-2.0-MoonSSH_0.1.0"
-  accept_host_key : (String, Bytes) -> Bool  // 验证器；默认放行
+  host_key_policy : HostKeyPolicy          // 默认 Strict, 无条目 -> 拒绝所有未知主机
   timeout_ms : Int                          // 默认 30_000
 }
 ```
 
-构造与链式配置：
+**安全默认值**：`ConnectOptions::new(...)` 默认策略是
+`Strict(entries=[], on_unknown=reject)`——未显式配置则**拒绝所有未知主机**。
+请按下列四种模式之一显式启用校验：
+
+| 方法 | 适用场景 |
+|---|---|
+| `.with_strict_host_key_check(content)` | 加载 OpenSSH 格式 known_hosts；命中放行，未命中拒绝；key 不一致抛 `HostKeyMismatch`（MITM 警告）。 |
+| `.with_trust_on_first_use(content, prompt)` | 首次连接由 `prompt(host, alg, key) -> Bool` 决定是否接受并**持久化**到 entries；之后按 Strict 校验。 |
+| `.with_host_key_verifier(f)` | 由 `(alg, key) -> Bool` 回调完全接管校验；适用于自定义指纹格式、HSM / 外部 Trust Store 集成。 |
+| `.with_insecure_host_key()` | **跳过 host key 校验**。仅用于受信任内网 / 本地回环。**公网禁用**。 |
+
+`content` 由调用方读取 known_hosts 文件得到（本库不直接依赖文件系统，保持协议层纯净）。
+
+构造示例：
 
 ```moonbit
+// 1. 严格模式：加载本地 known_hosts
+let kh = read_known_hosts("~/.ssh/known_hosts")  // 调用方自己读
 let opts = @src.ConnectOptions::new("example.com", 22, "alice")
-  .with_host_key_verifier((alg, key) => {
-    // 返回 true 接受；false 拒绝
-    inspect(alg)
-    inspect(key.length())
-    true
+  .with_strict_host_key_check(kh)
+
+// 2. TOFU：首次询问用户
+let opts2 = @src.ConnectOptions::new("new.host.com", 22, "alice")
+  .with_trust_on_first_use("", (host, alg, key) => {
+    let fp = fingerprint(alg, key)
+    confirm("Trust \{host} (fp=\{fp})? [y/N]")
   })
+
+// 3. 自定义校验（HSM / 外部 Trust Store）
+let opts3 = @src.ConnectOptions::new("example.com", 22, "alice")
+  .with_host_key_verifier((alg, key) => hsm.verify("ssh-host", alg, key))
+
+// 4. 内网测试：跳过校验
+let opts4 = @src.ConnectOptions::new("127.0.0.1", 2222, "test")
+  .with_insecure_host_key()
 ```
 
-> **注：** `ConnectOptions` 当前只暴露 `with_host_key_verifier()`；自定义 banner / 超时等字段暂未提供 `with_*` setter。
+KEX 阶段在收到服务端公钥时根据策略产出 `HostKeyDecision`：
+`Accept` → 继续；`RejectMismatch` / `RejectUnknown` / `RejectByUser`
+→ 抛出 `HostKeyMismatch`，原因见 `HostKeyDecision::reason(host, alg)`。
 
 ### 5.2 `Client` 顶层 API
 

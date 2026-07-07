@@ -88,6 +88,152 @@ fn wildcard_match(pat : String, s : String) -> Bool {
   pi == plen
 }
 
+// ============== Host key verification policy ==============
+
+///|
+/// Host key 校验策略。决定服务端公钥如何被验证。
+/// 默认 [Strict]：仅信任 known_hosts 中已有的条目；未知主机默认拒绝。
+pub enum HostKeyPolicy {
+  /// 严格模式：仅信任 known_hosts 中已有的条目。
+  ///
+  /// - 命中匹配条目（算法 + key 一致）→ 接受
+  /// - 命中 host 模式但算法或 key 不一致 → 拒绝（[HostKeyDecision::RejectMismatch]）
+  /// - 未命中任何 host 模式 → 调用 `on_unknown(host, alg, key)`，
+  ///   返回 `true` 才接受；默认实现返回 `false`。
+  Strict(Array[KnownHost], (String, String, Bytes) -> Bool)
+  /// Trust On First Use：首次连接时记录 key 并接受；之后按 [Strict] 行为校验。
+  ///
+  /// - 命中匹配条目 → 接受
+  /// - 命中 host 但 key 不一致 → 拒绝（MITM 警告）
+  /// - 未命中 → 调用 `on_first_use(host, alg, key)`，返回 `true` 才接受，
+  ///   并将 `{patterns, alg, key}` 持久化到 `entries`。
+  TrustOnFirstUse(Array[KnownHost], (String, String, Bytes) -> Bool)
+  /// 完全跳过 host key 校验。**仅用于受信任内网或本地回环测试**。
+  /// 不推荐用于公网。
+  Insecure
+  /// 由调用方传入的 `(alg, key) -> Bool` 回调完全接管校验。
+  /// 返回 `true` 接受；返回 `false` 时由 KEX 抛出 [HostKeyMismatch]。
+  /// 适用于需要自定义指纹格式或对接外部 HSM/Trust Store 的场景。
+  Callback((String, Bytes) -> Bool)
+}
+
+///|
+/// Host key 校验的判定结果。KEX 阶段据此决定接受或抛 [HostKeyMismatch]。
+pub enum HostKeyDecision {
+  /// 校验通过，继续 KEX。
+  Accept
+  /// 服务端 key 与已知条目不一致（MITM 嫌疑）。
+  RejectMismatch(String, Bytes)
+  /// 主机不在 known_hosts 中，且 `on_unknown` 未授权。
+  RejectUnknown
+  /// 用户回调（`on_unknown` 或 `on_first_use`）返回 `false`。
+  RejectByUser
+}
+
+///|
+/// 默认未知主机处理函数：拒绝所有未知主机。
+pub fn reject_unknown(_host : String, _alg : String, _key : Bytes) -> Bool {
+  false
+}
+
+///|
+/// 默认 TOFU 首次连接处理函数：接受并持久化。
+pub fn accept_and_persist(_host : String, _alg : String, _key : Bytes) -> Bool {
+  true
+}
+
+///|
+/// 根据策略对服务端 host key 做最终判定。
+///
+/// - `host`：连接的目标主机名（如 `example.com`）
+/// - `port`：端口（非 22 时按 `[host]:port` 匹配 known_hosts 模式）
+/// - `alg`：服务端公钥算法（如 `ssh-rsa`、`ecdsa-sha2-nistp256`）
+/// - `key`：服务端公钥原始字节
+pub fn verify_host_key(
+  policy : HostKeyPolicy,
+  host : String,
+  port : Int,
+  alg : String,
+  key : Bytes,
+) -> HostKeyDecision {
+  match policy {
+    Strict(entries, on_unknown) =>
+      match find_matching_entry(entries, host, port) {
+        Some(entry) =>
+          if entry.key_alg == alg && entry.key == key {
+            Accept
+          } else {
+            RejectMismatch(entry.key_alg, entry.key)
+          }
+        None => if on_unknown(host, alg, key) { Accept } else { RejectUnknown }
+      }
+    TrustOnFirstUse(entries, on_first_use) =>
+      match find_matching_entry(entries, host, port) {
+        Some(entry) =>
+          if entry.key_alg == alg && entry.key == key {
+            Accept
+          } else {
+            RejectMismatch(entry.key_alg, entry.key)
+          }
+        None =>
+          if on_first_use(host, alg, key) {
+            entries.push({
+              patterns: [host_pattern_for(host, port)],
+              key_alg: alg,
+              key,
+            })
+            Accept
+          } else {
+            RejectByUser
+          }
+      }
+    Insecure => Accept
+    Callback(f) => if f(alg, key) { Accept } else { RejectByUser }
+  }
+}
+
+///|
+/// 在条目列表中查找匹配给定 host:port 的条目。
+fn find_matching_entry(
+  entries : Array[KnownHost],
+  host : String,
+  port : Int,
+) -> KnownHost? {
+  for entry in entries {
+    if entry.matches(host, port) {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
+/// 生成单 host 模式字符串（端口 22 省略，否则用 `[host]:port`）。
+fn host_pattern_for(host : String, port : Int) -> String {
+  if port == 22 {
+    host
+  } else {
+    "[\{host}]:\{port}"
+  }
+}
+
+///|
+/// 把 [HostKeyDecision] 渲染成可读的拒绝原因。
+pub fn HostKeyDecision::reason(
+  self : HostKeyDecision,
+  host : String,
+  alg : String,
+) -> String {
+  match self {
+    Accept => "\{host} (alg=\{alg}): accepted"
+    RejectMismatch(stored_alg, _) =>
+      "\{host} (alg=\{alg}): key changed, stored=\{stored_alg} — possible MITM"
+    RejectUnknown =>
+      "\{host} (alg=\{alg}): not in known_hosts and policy rejects unknown hosts"
+    RejectByUser => "\{host} (alg=\{alg}): rejected by user callback"
+  }
+}
+
 // ============== Parsing ==============
 
 ///|

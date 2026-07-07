@@ -18,9 +18,15 @@ test "ssh_client/connect_options_defaults" {
   inspect(opts.user, content="root")
   inspect(opts.client_banner is None, content="true")
   inspect(opts.timeout_ms, content="30000")
-  // 默认 accept_host_key 应接受任何密钥
-  let accepted = (opts.accept_host_key)("ssh-rsa", b"fakekey")
-  inspect(accepted, content="true")
+  // 默认 host_key_policy 应为 Strict 且拒绝未知主机
+  let decision = verify_host_key(
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-rsa",
+    b"anykey",
+  )
+  inspect(decision is RejectUnknown, content="true")
 }
 
 ///|
@@ -35,16 +41,126 @@ test "ssh_client/connect_options_with_custom_banner" {
 }
 
 ///|
+test "ssh_client/connect_options_with_insecure_host_key" {
+  // with_insecure_host_key 应让所有 host key 通过
+  let opts = ConnectOptions::new("host", 22, "user").with_insecure_host_key()
+  let decision = verify_host_key(
+    opts.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"anykey",
+  )
+  inspect(decision is Accept, content="true")
+}
+
+///|
+test "ssh_client/connect_options_with_strict_known_hosts" {
+  // 已加载的 known_hosts 中条目应被命中
+  let kh = "example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA7Q=="
+  let opts = ConnectOptions::new("example.com", 22, "user").with_strict_host_key_check(
+    kh,
+  ) catch {
+    e => fail("with_strict_host_key_check: \{to_repr(e)}")
+  }
+  // alg 与 key 匹配 -> Accept
+  let good = verify_host_key(
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-ed25519",
+    Bytes::from_array([
+      b'\x00', b'\xde', b'\xad', b'\xbe', b'\xef', b'\x00', b'\x42', b'\x42',
+    ]),
+  )
+  inspect(good is RejectMismatch(_, _), content="true") // key 不同 -> mismatch
+  // 完全不匹配的主机 -> RejectUnknown
+  let unknown = verify_host_key(
+    opts.host_key_policy,
+    "attacker.com",
+    22,
+    "ssh-rsa",
+    b"key",
+  )
+  inspect(unknown is RejectUnknown, content="true")
+}
+
+///|
+test "ssh_client/connect_options_with_trust_on_first_use" {
+  // TOFU: 首次连接由 prompt 决定；后续必须匹配
+  let mut called = 0
+  let prompt : (String, String, Bytes) -> Bool = (_h, _a, _k) => {
+    called = called + 1
+    true
+  }
+  let kh = ""
+  let opts = ConnectOptions::new("example.com", 22, "user").with_trust_on_first_use(
+    kh, prompt,
+  ) catch {
+    e => fail("with_trust_on_first_use: \{to_repr(e)}")
+  }
+  let key = b"firstkey"
+  let first = verify_host_key(
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-rsa",
+    key,
+  )
+  inspect(first is Accept, content="true")
+  inspect(called, content="1")
+  // 第二次同样 key -> Accept，不再回调
+  let second = verify_host_key(
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-rsa",
+    key,
+  )
+  inspect(second is Accept, content="true")
+  inspect(called, content="1")
+  // 第三次换 key -> MITM reject
+  let third = verify_host_key(
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-rsa",
+    b"differentkey",
+  )
+  inspect(third is RejectMismatch(_, _), content="true")
+}
+
+///|
 test "ssh_client/connect_options_with_host_key_verifier" {
-  // with_host_key_verifier 应替换默认的验证函数
-  let opts = ConnectOptions::new("host", 22, "user")
-  let verified_opts = opts.with_host_key_verifier((_alg, _key) => false)
-  // 新验证器应拒绝所有密钥
-  let rejected = (verified_opts.accept_host_key)("ssh-rsa", b"key")
-  inspect(rejected, content="false")
-  // 原始 opts 的验证器仍应接受
-  let accepted = (opts.accept_host_key)("ssh-rsa", b"key")
-  inspect(accepted, content="true")
+  // with_host_key_verifier：回调返回 true -> Accept
+  let accepting = ConnectOptions::new("host", 22, "user").with_host_key_verifier((
+      _a,
+      _k,
+    ) => true,
+  )
+  let accept = verify_host_key(
+    accepting.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"k",
+  )
+  inspect(accept is Accept, content="true")
+
+  // 回调返回 false -> RejectByUser（KEX 阶段抛 HostKeyMismatch）
+  let rejecting = ConnectOptions::new("host", 22, "user").with_host_key_verifier((
+      _a,
+      _k,
+    ) => false,
+  )
+  let reject = verify_host_key(
+    rejecting.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"k",
+  )
+  inspect(reject is RejectByUser, content="true")
 }
 
 ///|

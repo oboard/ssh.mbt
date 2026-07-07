@@ -533,11 +533,13 @@ fn is_dh_alg(alg : String) -> Bool {
 
 ///|
 /// 执行完整的密钥交换。
+/// `verify_host_key` 由 [Client::kex] 从 `HostKeyPolicy` 包装得到：
+/// 校验通过则正常返回，校验失败则抛出 [HostKeyMismatch]。
 pub fn KexContext::drive(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
   write_packet : (Bytes) -> Unit raise SshError,
-  accept_host_key : (String, Bytes) -> Bool,
+  verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   if self.state != Initial {
     raise ProtocolError("kex: invalid state")
@@ -587,9 +589,9 @@ pub fn KexContext::drive(
 
   // 4. 根据协商的 KEX 算法执行交换
   if is_ecdh_alg(self.kex_alg) {
-    self.drive_ecdh(safe_read, write_packet, accept_host_key)
+    self.drive_ecdh(safe_read, write_packet, verify_host_key)
   } else if is_dh_alg(self.kex_alg) {
-    self.drive_dh(safe_read, write_packet, accept_host_key)
+    self.drive_dh(safe_read, write_packet, verify_host_key)
   } else {
     raise ProtocolError("kex: unsupported algorithm \{self.kex_alg}")
   }
@@ -600,7 +602,7 @@ fn KexContext::drive_ecdh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
   write_packet : (Bytes) -> Unit raise SshError,
-  accept_host_key : (String, Bytes) -> Bool,
+  verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   // a. 生成 ECDH 密钥对
   let (priv_key, client_pub_bytes) = @crypto.ecdh_nistp256_generate() catch {
@@ -625,9 +627,7 @@ fn KexContext::drive_ecdh(
 
   // d. 验证 host key
   let host_key_alg = parse_host_key_algorithm(reply.host_key)
-  if !accept_host_key(host_key_alg, reply.host_key) {
-    raise HostKeyMismatch(host_key_alg)
-  }
+  verify_host_key(host_key_alg, reply.host_key)
   self.peer_host_key = reply.host_key
 
   // e. 计算共享密钥 K
@@ -686,7 +686,7 @@ fn KexContext::drive_dh(
   self : KexContext,
   read_packet : () -> Bytes raise SshError,
   write_packet : (Bytes) -> Unit raise SshError,
-  accept_host_key : (String, Bytes) -> Bool,
+  verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   let p = @crypto.dh_group14_prime()
   let g = @crypto.dh_group14_generator()
@@ -718,9 +718,7 @@ fn KexContext::drive_dh(
 
   // e. 验证 host key
   let host_key_alg = parse_host_key_algorithm(reply.host_key)
-  if !accept_host_key(host_key_alg, reply.host_key) {
-    raise HostKeyMismatch(host_key_alg)
-  }
+  verify_host_key(host_key_alg, reply.host_key)
   self.peer_host_key = reply.host_key
 
   // f. K = f^x mod p
