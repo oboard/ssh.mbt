@@ -951,7 +951,7 @@ fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
       let port_raw = conn.read_exact(2) catch {
         e => raise IoError("socks5: read port: \{e}")
       }
-      let ip = "\{addr.unsafe_get(0)}.\{addr.unsafe_get(1)}.\{addr.unsafe_get(2)}.\{addr.unsafe_get(3)}"
+      let ip = ipv4_bytes_to_string(addr)
       let p = (port_raw.unsafe_get(0).to_int() << 8) |
         port_raw.unsafe_get(1).to_int()
       (ip, p)
@@ -984,6 +984,15 @@ fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
       raise ProtocolError("socks5: unknown address type")
     }
   }
+}
+
+///|
+/// 将 4 字节 IPv4 地址转为点分十进制字符串。
+///
+/// 注意：MoonBit 的 `Byte::to_string` 返回调试格式 `b'\xHH'` 而非十进制数字，
+/// 因此必须先 `.to_int()` 再插值，否则 IP 会变成 `b'\xAC'.b'\x12'...` 这样的垃圾串。
+fn ipv4_bytes_to_string(addr : Bytes) -> String {
+  "\{addr.unsafe_get(0).to_int()}.\{addr.unsafe_get(1).to_int()}.\{addr.unsafe_get(2).to_int()}.\{addr.unsafe_get(3).to_int()}"
 }
 
 // ============== Internal packet I/O ==============

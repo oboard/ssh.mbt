@@ -399,3 +399,30 @@ test "ssh_client/parse_mac_algorithm_hmac_sha256_properties" {
   // SHA-256 HMAC 输出 32 字节
   inspect(alg.output_len(), content="32")
 }
+
+// ============== SOCKS5 IPv4 address parsing ==============
+
+///|
+test "ssh_client/ipv4_bytes_to_string_typical" {
+  // 172.18.0.1 (Docker gateway)
+  let addr = Bytes::from_array([b'\xAC', b'\x12', b'\x00', b'\x01'])
+  inspect(ipv4_bytes_to_string(addr), content="172.18.0.1")
+}
+
+///|
+test "ssh_client/ipv4_bytes_to_string_localhost" {
+  let addr = Bytes::from_array([b'\x7F', b'\x00', b'\x00', b'\x01'])
+  inspect(ipv4_bytes_to_string(addr), content="127.0.0.1")
+}
+
+///|
+test "ssh_client/ipv4_bytes_to_string_zeros" {
+  let addr = Bytes::from_array([b'\x00', b'\x00', b'\x00', b'\x00'])
+  inspect(ipv4_bytes_to_string(addr), content="0.0.0.0")
+}
+
+///|
+test "ssh_client/ipv4_bytes_to_string_max" {
+  let addr = Bytes::from_array([b'\xFF', b'\xFF', b'\xFF', b'\xFF'])
+  inspect(ipv4_bytes_to_string(addr), content="255.255.255.255")
+}
