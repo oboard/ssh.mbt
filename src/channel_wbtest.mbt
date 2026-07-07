@@ -639,3 +639,84 @@ test "msg_constants/correct_values" {
   inspect(MSG_REQUEST_SUCCESS.to_int(), content="81")
   inspect(MSG_REQUEST_FAILURE.to_int(), content="82")
 }
+
+// ============== handle_inbound remaining branches ==============
+
+///|
+test "handle_inbound/unknown_channel_type_in_open_returns_failure" {
+  // MSG_CHANNEL_OPEN(90) + unknown channel type → OPEN_FAILURE
+  let w = Writer::new()
+  w.write_byte(0x5a) // MSG_CHANNEL_OPEN
+  w.write_string_from_str("x11") // 未知通道类型
+  w.write_uint32(42) // sender_channel
+  w.write_uint32(1024 * 1024) // initial_window
+  w.write_uint32(32 * 1024) // max_packet
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  // 应返回一条 OPEN_FAILURE
+  inspect(responses.length(), content="1")
+  let (msg, body) = channel_msg_body(responses[0]) catch {
+    _ => (b'\x00', b"")
+  }
+  inspect(msg.to_int(), content="92") // MSG_CHANNEL_OPEN_FAILURE
+  let r = Reader::new(body)
+  inspect(r.read_uint32(), content="42") // recipient = sender_ch
+  inspect(r.read_uint32(), content="3") // reason = unknown channel type
+}
+
+///|
+test "handle_inbound/global_request_no_want_reply_returns_empty" {
+  // MSG_GLOBAL_REQUEST(80) + name + want_reply(0) → 不回复
+  let w = Writer::new()
+  w.write_byte(0x50)
+  w.write_string_from_str("keepalive@openssh.com")
+  w.write_byte(0) // want_reply = false
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}
+
+///|
+test "handle_inbound/request_success_returns_empty" {
+  // MSG_REQUEST_SUCCESS(81) → 忽略
+  let payload = Bytes::from_array([b'\x51'])
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(payload) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}
+
+///|
+test "handle_inbound/request_failure_returns_empty" {
+  // MSG_REQUEST_FAILURE(82) → 忽略
+  let payload = Bytes::from_array([b'\x52'])
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(payload) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}
+
+///|
+test "handle_inbound/ignore_msg_returns_empty" {
+  // SSH_MSG_IGNORE(2) → 忽略
+  let payload = Bytes::from_array([b'\x02'])
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(payload) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}
+
+///|
+test "handle_inbound/debug_msg_returns_empty" {
+  // SSH_MSG_DEBUG(4) → 忽略
+  let payload = Bytes::from_array([b'\x04'])
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(payload) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}
+
+///|
+test "handle_inbound/ext_info_msg_returns_empty" {
+  // SSH_MSG_EXT_INFO(7) → 忽略
+  let payload = Bytes::from_array([b'\x07'])
+  let ch = Channel::new(1)
+  let responses = ch.handle_inbound(payload) catch { _ => [] }
+  inspect(responses.length(), content="0")
+}

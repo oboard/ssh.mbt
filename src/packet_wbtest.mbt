@@ -558,3 +558,60 @@ test "bytes_to_utf8_string/incomplete_two_byte" {
   let s = bytes_to_utf8_string(Bytes::from_array([b'\xc3']))
   inspect(s.length() >= 1, content="true")
 }
+
+///|
+test "bytes_to_utf8_string/incomplete_three_byte" {
+  // 0xE4 后面没有足够的 continuation byte → 替换字符
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\xe4']))
+  inspect(s.length() >= 1, content="true")
+}
+
+///|
+test "bytes_to_utf8_string/incomplete_three_byte_one_cont" {
+  // 0xE4 0xB8 后面缺少第二个 continuation byte → 替换字符 + 处理剩余
+  let s = bytes_to_utf8_string(
+    Bytes::from_array([b'\xe4', b'\xb8']),
+  )
+  inspect(s.length() >= 1, content="true")
+}
+
+///|
+test "bytes_to_utf8_string/four_byte_starter" {
+  // 0xF0 开头的 4 字节 UTF-8 → 当前实现返回替换字符
+  let s = bytes_to_utf8_string(
+    Bytes::from_array([b'\xf0', b'\x90', b'\x80', b'\x80']),
+  )
+  // 实现不支持 4 字节序列，返回替换字符
+  inspect(s.length() >= 1, content="true")
+}
+
+// ============== Reader edge cases ==============
+
+///|
+test "reader/read_bytes_past_eof_raises" {
+  // 尝试读取超过剩余长度的字节应抛出 ParseError
+  let r = Reader::new(Bytes::from_array([b'\x01', b'\x02']))
+  try {
+    let _ = r.read_bytes(3)
+    fail("expected ParseError")
+  } catch {
+    ParseError(msg) => {
+      inspect(msg.contains("need 3 bytes"), content="true")
+      inspect(msg.contains("have 2"), content="true")
+    }
+    _ => fail("expected ParseError")
+  }
+}
+
+///|
+test "reader/read_uint32_insufficient_bytes_raises" {
+  // 只有 2 字节时尝试读取 uint32 应抛出 ParseError
+  let r = Reader::new(Bytes::from_array([b'\x01', b'\x02']))
+  try {
+    let _ = r.read_uint32()
+    fail("expected ParseError")
+  } catch {
+    ParseError(_) => ()
+    _ => fail("expected ParseError")
+  }
+}
