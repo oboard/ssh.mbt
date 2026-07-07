@@ -104,7 +104,7 @@ jobs:
           echo "run-local.sh started with PID $RUN_PID"
 
           sleep 5
-          curl -sf http://127.0.0.1:2080 > /dev/null
+          curl -vv http://127.0.0.1:2080
           echo "Local forwarding OK"
 
           kill $RUN_PID 2>/dev/null || true
@@ -126,7 +126,7 @@ jobs:
           echo "run-socks5.sh started with PID $RUN_PID"
 
           sleep 5
-          curl -sf --socks5 127.0.0.1:3080 http://$GATEWAY_IP:1080 > /dev/null
+          curl -vv --socks5 127.0.0.1:3080 http://$GATEWAY_IP:1080
           echo "SOCKS5 proxy OK"
 
           kill $RUN_PID 2>/dev/null || true
