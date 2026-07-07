@@ -655,9 +655,7 @@ test "handle_inbound/unknown_channel_type_in_open_returns_failure" {
   let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
   // 应返回一条 OPEN_FAILURE
   inspect(responses.length(), content="1")
-  let (msg, body) = channel_msg_body(responses[0]) catch {
-    _ => (b'\x00', b"")
-  }
+  let (msg, body) = channel_msg_body(responses[0]) catch { _ => (b'\x00', b"") }
   inspect(msg.to_int(), content="92") // MSG_CHANNEL_OPEN_FAILURE
   let r = Reader::new(body)
   inspect(r.read_uint32(), content="42") // recipient = sender_ch

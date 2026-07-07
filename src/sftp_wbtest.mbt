@@ -397,9 +397,8 @@ test "sftp/check_ok_eof_raises" {
     check_ok(w.to_bytes())
     fail("expected ProtocolError")
   } catch {
-    ProtocolError(msg) => {
+    ProtocolError(msg) =>
       inspect(msg.contains("SFTP status 1:"), content="true")
-    }
     _ => fail("expected ProtocolError")
   }
 }

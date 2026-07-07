@@ -438,12 +438,28 @@ test "kex/compute_ecdh_exchange_hash_deterministic" {
   let k = Bytes::from_array([b'\x00', b'\x05'])
 
   let h1 = compute_ecdh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    q_c,
+    q_s,
+    k,
   ) catch {
     e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
   }
   let h2 = compute_ecdh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    q_c,
+    q_s,
+    k,
   ) catch {
     e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
   }
@@ -472,12 +488,28 @@ test "kex/compute_ecdh_exchange_hash_different_input" {
   let k2 = Bytes::from_array([b'\x00', b'\x06'])
 
   let h1 = compute_ecdh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k1,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    q_c,
+    q_s,
+    k1,
   ) catch {
     e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
   }
   let h2 = compute_ecdh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, q_c, q_s, k2,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    q_c,
+    q_s,
+    k2,
   ) catch {
     e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
   }
@@ -505,12 +537,28 @@ test "kex/compute_dh_exchange_hash_deterministic" {
   let k = Bytes::from_array([b'\x00', b'\x05'])
 
   let h1 = compute_dh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    e,
+    f,
+    k,
   ) catch {
     e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
   }
   let h2 = compute_dh_exchange_hash(
-    @crypto.Algorithm::sha256(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+    @crypto.Algorithm::sha256(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    e,
+    f,
+    k,
   ) catch {
     e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
   }
@@ -536,7 +584,15 @@ test "kex/compute_dh_exchange_hash_sha1" {
   let k = Bytes::from_array([b'\x00', b'\x03'])
 
   let h = compute_dh_exchange_hash(
-    @crypto.Algorithm::sha1(), v_c, v_s, i_c, i_s, k_s, e, f, k,
+    @crypto.Algorithm::sha1(),
+    v_c,
+    v_s,
+    i_c,
+    i_s,
+    k_s,
+    e,
+    f,
+    k,
   ) catch {
     e => fail("compute_dh_exchange_hash sha1: \{to_repr(e)}")
   }
@@ -554,7 +610,13 @@ test "kex/derive_keys_sha256" {
   let k = Bytes::from_array([b'\x00', b'\xcc'])
 
   let (iv_c2s, iv_s2c, ek_c2s, ek_s2c, mk_c2s, mk_s2c) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k, session_id, 16, 16, 32,
+    @crypto.Algorithm::sha256(),
+    h,
+    k,
+    session_id,
+    16,
+    16,
+    32,
   ) catch {
     e => fail("derive_keys: \{to_repr(e)}")
   }
@@ -569,7 +631,13 @@ test "kex/derive_keys_sha256" {
   inspect(mk_s2c.length(), content="32")
   // 相同输入应产生相同密钥
   let (iv_c2s2, _, _, _, _, _) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k, session_id, 16, 16, 32,
+    @crypto.Algorithm::sha256(),
+    h,
+    k,
+    session_id,
+    16,
+    16,
+    32,
   ) catch {
     e => fail("derive_keys 2: \{to_repr(e)}")
   }
@@ -590,12 +658,24 @@ test "kex/derive_keys_different_k_different_output" {
   let k2 = Bytes::from_array([b'\x00', b'\x02'])
 
   let (iv1, _, _, _, _, _) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k1, session_id, 16, 16, 32,
+    @crypto.Algorithm::sha256(),
+    h,
+    k1,
+    session_id,
+    16,
+    16,
+    32,
   ) catch {
     e => fail("derive_keys k1: \{to_repr(e)}")
   }
   let (iv2, _, _, _, _, _) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k2, session_id, 16, 16, 32,
+    @crypto.Algorithm::sha256(),
+    h,
+    k2,
+    session_id,
+    16,
+    16,
+    32,
   ) catch {
     e => fail("derive_keys k2: \{to_repr(e)}")
   }
@@ -631,7 +711,13 @@ test "kex/derive_keys_needs_multi_round_kdf" {
   let k = Bytes::from_array([b'\x00', b'\xee'])
 
   let (iv_c2s, iv_s2c, ek_c2s, ek_s2c, mk_c2s, mk_s2c) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k, session_id, 48, 48, 48,
+    @crypto.Algorithm::sha256(),
+    h,
+    k,
+    session_id,
+    48,
+    48,
+    48,
   ) catch {
     e => fail("derive_keys multi-round: \{to_repr(e)}")
   }
@@ -660,7 +746,13 @@ test "kex/derive_keys_exact_hash_length" {
   let k = Bytes::from_array([b'\x00', b'\x33'])
 
   let (iv, _, _, _, _, _) = derive_keys(
-    @crypto.Algorithm::sha256(), h, k, session_id, 32, 32, 32,
+    @crypto.Algorithm::sha256(),
+    h,
+    k,
+    session_id,
+    32,
+    32,
+    32,
   ) catch {
     e => fail("derive_keys exact: \{to_repr(e)}")
   }
@@ -675,7 +767,13 @@ test "kex/derive_keys_sha1" {
   let k = Bytes::from_array([b'\x00', b'\x66'])
 
   let (iv, ek, _, _, mk, _) = derive_keys(
-    @crypto.Algorithm::sha1(), h, k, session_id, 16, 16, 20,
+    @crypto.Algorithm::sha1(),
+    h,
+    k,
+    session_id,
+    16,
+    16,
+    20,
   ) catch {
     e => fail("derive_keys sha1: \{to_repr(e)}")
   }

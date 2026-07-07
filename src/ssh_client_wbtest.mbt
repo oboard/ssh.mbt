@@ -252,7 +252,11 @@ test "ssh_client/connect_options_with_strict_empty_content" {
     e => fail("with_strict_host_key_check empty: \{to_repr(e)}")
   }
   let decision = verify_host_key(
-    opts.host_key_policy, "host", 22, "ssh-rsa", b"key",
+    opts.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"key",
   )
   inspect(decision is RejectUnknown, content="true")
 }
@@ -268,7 +272,10 @@ test "ssh_client/connect_options_with_strict_bad_line_skipped" {
   }
   // 条目存在，但 key 不匹配 -> RejectMismatch
   let decision = verify_host_key(
-    opts.host_key_policy, "example.com", 22, "ssh-ed25519",
+    opts.host_key_policy,
+    "example.com",
+    22,
+    "ssh-ed25519",
     Bytes::from_array([b'\x00', b'\xff']),
   )
   inspect(decision is RejectMismatch(_, _), content="true")
@@ -285,12 +292,20 @@ test "ssh_client/connect_options_tofu_reject_changed_key" {
   }
   // 第一次：接受
   let first = verify_host_key(
-    opts.host_key_policy, "host", 22, "ssh-rsa", b"key1",
+    opts.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"key1",
   )
   inspect(first is Accept, content="true")
   // 第二次不同 key -> RejectMismatch
   let second = verify_host_key(
-    opts.host_key_policy, "host", 22, "ssh-rsa", b"key2",
+    opts.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"key2",
   )
   inspect(second is RejectMismatch(_, _), content="true")
 }
@@ -305,7 +320,11 @@ test "ssh_client/connect_options_tofu_prompt_reject" {
     e => fail("tofu reject: \{to_repr(e)}")
   }
   let decision = verify_host_key(
-    opts.host_key_policy, "host", 22, "ssh-rsa", b"key",
+    opts.host_key_policy,
+    "host",
+    22,
+    "ssh-rsa",
+    b"key",
   )
   inspect(decision is RejectByUser, content="true")
 }
@@ -313,20 +332,18 @@ test "ssh_client/connect_options_tofu_prompt_reject" {
 ///|
 test "ssh_client/connect_options_callback_accept_and_reject" {
   // Callback 模式：自定义校验器
-  let accept_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier(
-    (_a, _k) => true,
-  )
-  let r1 = verify_host_key(
-    accept_all.host_key_policy, "h", 22, "ssh-rsa", b"k",
-  )
+  let accept_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier((
+    _a,
+    _k,
+  ) => true)
+  let r1 = verify_host_key(accept_all.host_key_policy, "h", 22, "ssh-rsa", b"k")
   inspect(r1 is Accept, content="true")
 
-  let reject_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier(
-    (_a, _k) => false,
-  )
-  let r2 = verify_host_key(
-    reject_all.host_key_policy, "h", 22, "ssh-rsa", b"k",
-  )
+  let reject_all = ConnectOptions::new("h", 22, "u").with_host_key_verifier((
+    _a,
+    _k,
+  ) => false)
+  let r2 = verify_host_key(reject_all.host_key_policy, "h", 22, "ssh-rsa", b"k")
   inspect(r2 is RejectByUser, content="true")
 }
 
@@ -347,7 +364,11 @@ test "ssh_client/connect_options_with_insecure_accepts_any" {
   // Insecure 模式应接受任何 host key
   let opts = ConnectOptions::new("any", 22, "u").with_insecure_host_key()
   let r = verify_host_key(
-    opts.host_key_policy, "any", 22, "any-alg", b"any-key",
+    opts.host_key_policy,
+    "any",
+    22,
+    "any-alg",
+    b"any-key",
   )
   inspect(r is Accept, content="true")
 }

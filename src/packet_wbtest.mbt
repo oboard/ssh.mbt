@@ -526,9 +526,7 @@ test "bytes_to_utf8_string/two_byte_chars" {
 ///|
 test "bytes_to_utf8_string/three_byte_chars" {
   // 3 字节 UTF-8: 0xE4 0xB8 0xAD = 中 (U+4E2D)
-  let s = bytes_to_utf8_string(
-    Bytes::from_array([b'\xe4', b'\xb8', b'\xad']),
-  )
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\xe4', b'\xb8', b'\xad']))
   inspect(s.length(), content="1")
   inspect(s, content="中")
 }
@@ -536,9 +534,7 @@ test "bytes_to_utf8_string/three_byte_chars" {
 ///|
 test "bytes_to_utf8_string/mixed_ascii_and_multibyte" {
   // "hi中" = h(1) + i(1) + 中(3) = 5 字节
-  let data = Bytes::from_array([
-    b'\x68', b'\x69', b'\xe4', b'\xb8', b'\xad',
-  ])
+  let data = Bytes::from_array([b'\x68', b'\x69', b'\xe4', b'\xb8', b'\xad'])
   let s = bytes_to_utf8_string(data)
   inspect(s, content="hi中")
   inspect(s.length(), content="3")
@@ -569,9 +565,7 @@ test "bytes_to_utf8_string/incomplete_three_byte" {
 ///|
 test "bytes_to_utf8_string/incomplete_three_byte_one_cont" {
   // 0xE4 0xB8 后面缺少第二个 continuation byte → 替换字符 + 处理剩余
-  let s = bytes_to_utf8_string(
-    Bytes::from_array([b'\xe4', b'\xb8']),
-  )
+  let s = bytes_to_utf8_string(Bytes::from_array([b'\xe4', b'\xb8']))
   inspect(s.length() >= 1, content="true")
 }
 
