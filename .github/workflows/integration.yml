@@ -1,11 +1,12 @@
-name: CI
+name: Integration
 
 on:
   push:
   pull_request:
 
 jobs:
-  test:
+  integration:
+    name: SSH cmd integration (Linux)
     runs-on: ubuntu-latest
 
     defaults:
@@ -19,31 +20,8 @@ jobs:
       - name: Setup Moon env
         run: |
           apt-get update && apt-get install -y gcc libssl-dev
-          curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
-
-      - name: Moon Check
-        run: |
-          moon fmt --check
-          moon check
-          moon info
-          git diff --exit-code
-          git status
-
-      - name: Moon test
-        run: |
-          echo moon test
-          moon test --enable-coverage
-          moon coverage report -f summary
-
-          moon coverage analyze
-
-          # ffi test
-          echo moon test native
-          moon test --target native --enable-coverage
-          moon coverage report -f summary
-          
-          moon coverage analyze
 
       - name: Run ssh-server scripts, start ssh server
         run: |
@@ -84,7 +62,7 @@ jobs:
             echo "==> Running $f"
             bash "$f"
           done
-      
+
       - name: Run cmd/sftp sequentially, run moon connect to ssh server and file & directory operations
         run: |
           set -e

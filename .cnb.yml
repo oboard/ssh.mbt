@@ -25,4 +25,4 @@ $:
             - echo "$CNB_VSCODE_PROXY_URI" >> CNB_VSCODE_PROXY_URI
         - name: docker-openssh-servers
           script:
-            - docker run -d --name ssh-server -p 1022:2222 -e SUDO_ACCESS=true -e USER_NAME=admin -e PASSWORD_ACCESS=true -e USER_PASSWORD=123456 lscr.io/linuxserver/openssh-server
+            - cd ./script/ssh-server && ./password.sh
