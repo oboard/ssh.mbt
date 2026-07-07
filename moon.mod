@@ -36,3 +36,5 @@ description = "SSHv2 client library for MoonBit with password and publickey auth
 options(
   "include": [ "README.md", "README.mbt.md", "src", "cmd", "scripts" ],
 )
+
+preferred_target = "native"
