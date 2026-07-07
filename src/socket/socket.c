@@ -36,6 +36,11 @@ typedef unsigned long (WSAAPI *InetAddrFn)(const char *);
 typedef struct hostent *(WSAAPI *GetHostByNameFn)(const char *);
 typedef int (WSAAPI *WSAGetLastErrorFn)(void);
 typedef int (WSAAPI *SetSockOptFn)(SOCKET, int, int, const char *, int);
+typedef int (WSAAPI *BindFn)(SOCKET, const struct sockaddr *, int);
+typedef int (WSAAPI *ListenFn)(SOCKET, int);
+typedef SOCKET (WSAAPI *AcceptFn)(SOCKET, struct sockaddr *, int *);
+typedef int (WSAAPI *SelectFn)(int, fd_set *, fd_set *, fd_set *, const struct timeval *);
+typedef int (WSAAPI *IoctlSocketFn)(SOCKET, long, unsigned long *);
 
 static WSAStartupFn p_WSAStartup = 0;
 static SocketFn p_socket = 0;
@@ -47,6 +52,11 @@ static InetAddrFn p_inet_addr = 0;
 static GetHostByNameFn p_gethostbyname = 0;
 static WSAGetLastErrorFn p_WSAGetLastError = 0;
 static SetSockOptFn p_setsockopt = 0;
+static BindFn p_bind = 0;
+static ListenFn p_listen = 0;
+static AcceptFn p_accept = 0;
+static SelectFn p_select = 0;
+static IoctlSocketFn p_ioctlsocket = 0;
 
 static int load_winsock(void) {
     if (winsock_module) {
@@ -66,9 +76,15 @@ static int load_winsock(void) {
     p_gethostbyname = (GetHostByNameFn)GetProcAddress(winsock_module, "gethostbyname");
     p_WSAGetLastError = (WSAGetLastErrorFn)GetProcAddress(winsock_module, "WSAGetLastError");
     p_setsockopt = (SetSockOptFn)GetProcAddress(winsock_module, "setsockopt");
+    p_bind = (BindFn)GetProcAddress(winsock_module, "bind");
+    p_listen = (ListenFn)GetProcAddress(winsock_module, "listen");
+    p_accept = (AcceptFn)GetProcAddress(winsock_module, "accept");
+    p_select = (SelectFn)GetProcAddress(winsock_module, "select");
+    p_ioctlsocket = (IoctlSocketFn)GetProcAddress(winsock_module, "ioctlsocket");
     if (!p_WSAStartup || !p_socket || !p_connect || !p_send || !p_recv ||
         !p_closesocket || !p_inet_addr || !p_gethostbyname ||
-        !p_WSAGetLastError || !p_setsockopt) {
+        !p_WSAGetLastError || !p_setsockopt || !p_bind || !p_listen ||
+        !p_accept || !p_select || !p_ioctlsocket) {
         return -1;
     }
     return 0;
@@ -271,9 +287,9 @@ int socket_bind_listen(int handle, int port, int backlog) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = socket_htons((uint16_t)port);
 
-    if (bind((SOCKET)handle, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR)
+    if (p_bind((SOCKET)handle, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR)
         return -1;
-    if (listen((SOCKET)handle, backlog) == SOCKET_ERROR)
+    if (p_listen((SOCKET)handle, backlog) == SOCKET_ERROR)
         return -1;
     return 0;
 }
@@ -284,9 +300,12 @@ int socket_bind_listen(int handle, int port, int backlog) {
  * Returns: new socket handle for the accepted connection, -1 on error
  */
 int socket_accept(int handle) {
+    if (!p_accept && load_winsock() != 0) {
+        return -1;
+    }
     struct sockaddr_in addr;
     int addrlen = sizeof(addr);
-    SOCKET client = accept((SOCKET)handle, (struct sockaddr *)&addr, &addrlen);
+    SOCKET client = p_accept((SOCKET)handle, (struct sockaddr *)&addr, &addrlen);
     if (client == INVALID_SOCKET) {
         return -1;
     }
@@ -299,11 +318,14 @@ int socket_accept(int handle) {
  * Returns: 1 if connection pending, 0 if none, -1 on error
  */
 int socket_poll_accept(int handle) {
+    if (!p_select && load_winsock() != 0) {
+        return -1;
+    }
     fd_set fds;
     struct timeval tv = {0, 0}; // non-blocking
     FD_ZERO(&fds);
     FD_SET((SOCKET)handle, &fds);
-    return select(0, &fds, NULL, NULL, &tv);
+    return p_select(0, &fds, NULL, NULL, &tv);
 }
 
 /*
@@ -311,8 +333,11 @@ int socket_poll_accept(int handle) {
  * Returns: 0 on success, -1 on error
  */
 int socket_set_nonblocking(int handle) {
+    if (!p_ioctlsocket && load_winsock() != 0) {
+        return -1;
+    }
     unsigned long mode = 1; // 1 = non-blocking
-    return ioctlsocket((SOCKET)handle, FIONBIO, &mode);
+    return p_ioctlsocket((SOCKET)handle, FIONBIO, &mode);
 }
 
 /*
@@ -321,11 +346,14 @@ int socket_set_nonblocking(int handle) {
  * Returns: 1 if data available, 0 if none, -1 on error
  */
 int socket_poll_readable(int handle) {
+    if (!p_select && load_winsock() != 0) {
+        return -1;
+    }
     fd_set fds;
     struct timeval tv = {0, 0}; // non-blocking
     FD_ZERO(&fds);
     FD_SET((SOCKET)handle, &fds);
-    return select(0, &fds, NULL, NULL, &tv);
+    return p_select(0, &fds, NULL, NULL, &tv);
 }
 
 #else
