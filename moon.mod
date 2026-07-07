@@ -33,8 +33,8 @@ keywords = [
 
 description = "SSHv2 client library for MoonBit with password and publickey authentication, SFTP v3, and local/remote/SOCKS5 port forwarding. / 使用 MoonBit 实现的 SSHv2 客户端库，支持密码/公钥认证、SFTP v3 文件传输及本地/远程/SOCKS5 端口转发"
 
+preferred_target = "native"
+
 options(
   "include": [ "README.md", "README.mbt.md", "src", "cmd", "scripts" ],
 )
-
-preferred_target = "native"
