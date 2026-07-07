@@ -22,10 +22,19 @@ jobs:
           curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
-      - name: Monon coverage
-        run: moon coverage analyze
+      - name: moon fmt --check
+        run: moon fmt --check
 
-      - name: Moon test
+      - name: moon check
+        run: moon check
+
+      - name: moon info && git diff --exit-code
+        run: |
+          moon info
+          git diff --exit-code
+          git status
+
+      - name: moon test
         run: |
           echo moon test
           moon test --enable-coverage
@@ -35,6 +44,9 @@ jobs:
           echo moon test native
           moon test --target native --enable-coverage
           moon coverage report -f summary
+
+      - name: Monon coverage
+        run: moon coverage analyze
 
       - name: Run ssh-server scripts, start ssh server
         run: |
