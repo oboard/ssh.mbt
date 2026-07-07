@@ -62,7 +62,7 @@ test "sftp/parse_attrs_size_only" {
   w.write_uint32(0) // size high 32 bits
   let attrs = parse_attrs(w.to_bytes())
   inspect(attrs.flags, content="1")
-  inspect(attrs.size, content="Some(1024)")
+  @debug.debug_inspect(attrs.size, content="Some(1024)")
   inspect(attrs.uid is None, content="true")
 }
 
@@ -84,12 +84,12 @@ test "sftp/parse_attrs_full" {
   w.write_uint32(1700000000) // atime
   w.write_uint32(1700000001) // mtime
   let attrs = parse_attrs(w.to_bytes())
-  inspect(attrs.size, content="Some(2048)")
-  inspect(attrs.uid, content="Some(1000)")
-  inspect(attrs.gid, content="Some(1000)")
-  inspect(attrs.permissions, content="Some(493)")
-  inspect(attrs.atime, content="Some(1700000000)")
-  inspect(attrs.mtime, content="Some(1700000001)")
+  @debug.debug_inspect(attrs.size, content="Some(2048)")
+  @debug.debug_inspect(attrs.uid, content="Some(1000)")
+  @debug.debug_inspect(attrs.gid, content="Some(1000)")
+  @debug.debug_inspect(attrs.permissions, content="Some(493)")
+  @debug.debug_inspect(attrs.atime, content="Some(1700000000)")
+  @debug.debug_inspect(attrs.mtime, content="Some(1700000001)")
 }
 
 ///|
@@ -102,7 +102,7 @@ test "sftp/parse_attrs_from_reader" {
   w.write_uint32(999)
   let r = Reader::new(w.to_bytes())
   let attrs = parse_attrs_from_reader(r)
-  inspect(attrs.permissions, content="Some(420)")
+  @debug.debug_inspect(attrs.permissions, content="Some(420)")
   // Reader 应该已经推进到额外数据
   let extra = r.read_uint32()
   inspect(extra, content="999")
@@ -176,8 +176,8 @@ test "sftp/parse_name_entries_single" {
     entries[0].longname,
     content="-rw-r--r-- 1 user group 1024 Jan 1 00:00 file.txt",
   )
-  inspect(entries[0].attrs.size, content="Some(1024)")
-  inspect(entries[0].attrs.permissions, content="Some(420)")
+  @debug.debug_inspect(entries[0].attrs.size, content="Some(1024)")
+  @debug.debug_inspect(entries[0].attrs.permissions, content="Some(420)")
 }
 
 ///|
@@ -273,5 +273,5 @@ test "sftp/attrs_parse_consistency" {
   let a1 = parse_attrs(data)
   let a2 = parse_attrs(data)
   inspect(a1.flags, content=a2.flags.to_string())
-  inspect(a1.size, content=a2.size.to_string())
+  @debug.debug_inspect(a1.size, content=@debug.to_string(a2.size))
 }

@@ -28,7 +28,10 @@ test "ssh_client/connect_options_with_custom_banner" {
   // 可以通过结构体语法设置自定义 banner
   let opts = ConnectOptions::new("host", 22, "user")
   let custom = { ..opts, client_banner: Some("SSH-2.0-Custom_1.0") }
-  inspect(custom.client_banner, content="Some(SSH-2.0-Custom_1.0)")
+  @debug.debug_inspect(
+    custom.client_banner,
+    content="Some(\"SSH-2.0-Custom_1.0\")",
+  )
 }
 
 ///|

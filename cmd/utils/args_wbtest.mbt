@@ -3,50 +3,62 @@
 
 ///|
 test "tokenize_args/empty" {
-  inspect(tokenize_args(""), content="[]")
+  @debug.debug_inspect(tokenize_args(""), content="[]")
   // 纯空白应当返回空数组
-  inspect(tokenize_args(" "), content="[]")
-  inspect(tokenize_args("   "), content="[]")
-  inspect(tokenize_args("\t\t"), content="[]")
-  inspect(tokenize_args(" \t \t "), content="[]")
+  @debug.debug_inspect(tokenize_args(" "), content="[]")
+  @debug.debug_inspect(tokenize_args("   "), content="[]")
+  @debug.debug_inspect(tokenize_args("\t\t"), content="[]")
+  @debug.debug_inspect(tokenize_args(" \t \t "), content="[]")
 }
 
 ///|
 test "tokenize_args/single_token" {
-  inspect(tokenize_args("hello"), content="[hello]")
+  @debug.debug_inspect(tokenize_args("hello"), content="[\"hello\"]")
   // 前后空白被忽略
-  inspect(tokenize_args("  hello  "), content="[hello]")
-  inspect(tokenize_args("\thello\t"), content="[hello]")
+  @debug.debug_inspect(tokenize_args("  hello  "), content="[\"hello\"]")
+  @debug.debug_inspect(tokenize_args("\thello\t"), content="[\"hello\"]")
 }
 
 ///|
 test "tokenize_args/multiple_tokens" {
-  inspect(
+  @debug.debug_inspect(
     tokenize_args("user@host --exec uname -a"),
-    content="[user@host, --exec, uname, -a]",
+    content="[\"user@host\", \"--exec\", \"uname\", \"-a\"]",
   )
   // 多个空格/制表符视为一个分隔符
-  inspect(tokenize_args("a   b\t\tc"), content="[a, b, c]")
+  @debug.debug_inspect(
+    tokenize_args("a   b\t\tc"),
+    content="[\"a\", \"b\", \"c\"]",
+  )
 }
 
 ///|
 test "tokenize_args/single_quoted" {
   // 来自 args.mbt 文档的样例
-  inspect(
+  @debug.debug_inspect(
     tokenize_args("user@host --exec 'uname -a' --password \"my pass\""),
-    content="[user@host, --exec, uname -a, --password, my pass]",
+    content="[\"user@host\", \"--exec\", \"uname -a\", \"--password\", \"my pass\"]",
   )
   // 纯单引号字符串
-  inspect(tokenize_args("'hello world'"), content="[hello world]")
+  @debug.debug_inspect(
+    tokenize_args("'hello world'"),
+    content="[\"hello world\"]",
+  )
   // 引号紧贴分词
-  inspect(tokenize_args("foo'bar baz'qux"), content="[foo'bar, baz'qux]")
+  @debug.debug_inspect(
+    tokenize_args("foo'bar baz'qux"),
+    content="[\"foo'bar\", \"baz'qux\"]",
+  )
 }
 
 ///|
 test "tokenize_args/double_quoted" {
   // 含空格的双引号字符串
-  inspect(tokenize_args("\"my pass\""), content="[my pass]")
-  inspect(tokenize_args("\"hello world\" foo"), content="[hello world, foo]")
+  @debug.debug_inspect(tokenize_args("\"my pass\""), content="[\"my pass\"]")
+  @debug.debug_inspect(
+    tokenize_args("\"hello world\" foo"),
+    content="[\"hello world\", \"foo\"]",
+  )
 }
 
 ///|
@@ -71,10 +83,16 @@ test "tokenize_args/empty_quoted_produces_one_token" {
 ///|
 test "tokenize_args/unmatched_quote_reads_to_end" {
   // 没有结束引号时，函数读取至字符串末尾
-  inspect(tokenize_args("'unterminated"), content="[unterminated]")
-  inspect(tokenize_args("\"unterminated"), content="[unterminated]")
+  @debug.debug_inspect(
+    tokenize_args("'unterminated"),
+    content="[\"unterminated\"]",
+  )
+  @debug.debug_inspect(
+    tokenize_args("\"unterminated"),
+    content="[\"unterminated\"]",
+  )
   // 引号内的尾部空白也一并吞下
-  inspect(tokenize_args("'hello   "), content="[hello   ]")
+  @debug.debug_inspect(tokenize_args("'hello   "), content="[\"hello   \"]")
 }
 
 ///|
@@ -168,7 +186,7 @@ test "get_argv/empty_when_unset" {
   // 清除可能由其它测试设置的变量
   @env.set_env_var("MOONBIT_CLI_ARGS", "")
   let argv = get_argv()
-  inspect(argv, content="[]")
+  @debug.debug_inspect(argv, content="[]")
 }
 
 ///|
@@ -176,7 +194,10 @@ test "get_argv/tokenizes_env_value" {
   // get_argv 应当对环境变量值复用 tokenize_args
   @env.set_env_var("MOONBIT_CLI_ARGS", "user@host --exec 'uname -a'")
   let argv = get_argv()
-  inspect(argv, content="[user@host, --exec, uname -a]")
+  @debug.debug_inspect(
+    argv,
+    content="[\"user@host\", \"--exec\", \"uname -a\"]",
+  )
   // 测试结束后清理，避免影响其它测试
   @env.set_env_var("MOONBIT_CLI_ARGS", "")
 }

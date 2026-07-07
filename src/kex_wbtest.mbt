@@ -141,12 +141,12 @@ test "kexinit/first_returns_match" {
     comp_c2s: ["none"],
     comp_s2c: ["none"],
   }
-  inspect(ki.first(), content="Some(ecdh-sha2-nistp256)")
-  inspect(ki.first_host_key(), content="Some(rsa-sha2-256)")
-  inspect(ki.first_enc(), content="Some(aes128-ctr)")
+  @debug.debug_inspect(ki.first(), content="Some(\"ecdh-sha2-nistp256\")")
+  @debug.debug_inspect(ki.first_host_key(), content="Some(\"rsa-sha2-256\")")
+  @debug.debug_inspect(ki.first_enc(), content="Some(\"aes128-ctr\")")
   // 顺序：服务端优先列出 hmac-sha2-256，本端也包含，应当返回该算法
-  inspect(ki.first_mac(), content="Some(hmac-sha2-256)")
-  inspect(ki.first_comp(), content="Some(none)")
+  @debug.debug_inspect(ki.first_mac(), content="Some(\"hmac-sha2-256\")")
+  @debug.debug_inspect(ki.first_comp(), content="Some(\"none\")")
 }
 
 ///|
@@ -163,11 +163,11 @@ test "kexinit/first_no_match_is_none" {
     comp_c2s: ["c"],
     comp_s2c: ["d"],
   }
-  inspect(ki.first(), content="None")
-  inspect(ki.first_host_key(), content="None")
-  inspect(ki.first_enc(), content="None")
-  inspect(ki.first_mac(), content="None")
-  inspect(ki.first_comp(), content="None")
+  @debug.debug_inspect(ki.first(), content="None")
+  @debug.debug_inspect(ki.first_host_key(), content="None")
+  @debug.debug_inspect(ki.first_enc(), content="None")
+  @debug.debug_inspect(ki.first_mac(), content="None")
+  @debug.debug_inspect(ki.first_comp(), content="None")
 }
 
 // ============== ECDH payloads ==============

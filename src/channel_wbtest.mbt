@@ -22,7 +22,7 @@ test "channel/new_initial_state" {
     _ => fail("expected Closed")
   }
   inspect(ch.is_open(), content="false")
-  inspect(ch.exit_status(), content="None")
+  @debug.debug_inspect(ch.exit_status(), content="None")
 }
 
 ///|
@@ -352,7 +352,7 @@ test "handle_inbound/request_exit_status" {
   w.write_uint32(0) // status
   let ch = Channel::new(1)
   let _ = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
-  inspect(ch.exit_status(), content="Some(0)")
+  @debug.debug_inspect(ch.exit_status(), content="Some(0)")
 }
 
 ///|
@@ -602,7 +602,7 @@ test "handle_inbound/forwarded_tcpip_opens_channel" {
   w.write_string_from_str("10.0.0.1")
   w.write_uint32(12345)
   let ch = Channel::new(1)
-  let responses = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
+  let _ = ch.handle_inbound(w.to_bytes()) catch { _ => [] }
   // 通道应处于 Open 状态，peer_id 设为 sender_channel
   inspect(ch.is_open(), content="true")
   inspect(ch.peer_id(), content="7")
