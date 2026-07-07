@@ -2,10 +2,44 @@
 package "PaiGack/ssh_client/src/crypto"
 
 import {
+  "moonbitlang/core/bigint",
   "moonbitlang/core/debug",
 }
 
 // Values
+pub fn base64_decode(String) -> Bytes raise CryptoError
+
+pub fn dh_group14_generator() -> @bigint.BigInt
+
+pub fn dh_group14_keygen(@bigint.BigInt) -> (@bigint.BigInt, @bigint.BigInt)
+
+pub fn dh_group14_prime() -> @bigint.BigInt
+
+pub fn dh_group14_shared(@bigint.BigInt, @bigint.BigInt) -> @bigint.BigInt
+
+pub fn digest(Algorithm, Bytes) -> Bytes raise CryptoError
+
+pub fn ecdh_nistp256_derive(PKey, Bytes) -> Bytes raise CryptoError
+
+pub fn ecdh_nistp256_generate() -> (PKey, Bytes) raise CryptoError
+
+pub fn ensure_openssl() -> Unit
+
+pub fn err_clear() -> Unit
+
+pub fn err_get_and_clear() -> String
+
+pub fn err_get_error() -> String
+
+pub fn err_peek_code() -> UInt
+
+pub fn hmac(MacAlgorithm, Bytes, Bytes) -> Bytes raise CryptoError
+
+pub fn rand_bytes(Int) -> Bytes raise CryptoError
+
+pub fn read_openssh_pubkey(String) -> (String, Bytes) raise CryptoError
+
+pub fn truncate(Bytes, Int) -> Bytes
 
 // Errors
 pub suberror CryptoError {
@@ -15,6 +49,84 @@ pub suberror CryptoError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub enum Algorithm {
+  Sha1
+  Sha256
+} derive(Eq, @debug.Debug)
+pub fn Algorithm::output_len(Self) -> Int
+pub fn Algorithm::sha1() -> Self
+pub fn Algorithm::sha256() -> Self
+
+pub struct Cipher {
+  ctx : CipherCtx
+  alg : CipherAlgorithm
+  encrypt : Bool
+}
+pub fn Cipher::close(Self) -> Unit
+pub fn Cipher::finalize(Self) -> Bytes raise CryptoError
+pub fn Cipher::new(CipherAlgorithm, Bytes, Bytes, encrypt~ : Bool) -> Self raise CryptoError
+pub fn Cipher::update(Self, Bytes) -> Bytes raise CryptoError
+
+pub enum CipherAlgorithm {
+  Aes128Ctr
+} derive(Eq, @debug.Debug)
+pub fn CipherAlgorithm::aes128_ctr() -> Self
+pub fn CipherAlgorithm::block_len(Self) -> Int
+pub fn CipherAlgorithm::id(Self) -> Int
+pub fn CipherAlgorithm::iv_len(Self) -> Int
+pub fn CipherAlgorithm::key_len(Self) -> Int
+
+type CipherCtx
+
+pub struct Hasher {
+  ctx : MdCtx
+  alg : Algorithm
+}
+pub fn Hasher::finalize(Self) -> Bytes raise CryptoError
+pub fn Hasher::new(Algorithm) -> Self raise CryptoError
+pub fn Hasher::update(Self, Bytes) -> Unit raise CryptoError
+pub fn Hasher::update_string(Self, String) -> Unit raise CryptoError
+
+pub struct Mac {
+  alg : MacAlgorithm
+  buf : Array[Byte]
+  key : Bytes
+}
+pub fn Mac::alg_output_len(Self) -> Int
+pub fn Mac::finalize(Self) -> Bytes raise CryptoError
+pub fn Mac::hmac_on(Self, Bytes) -> Bytes raise CryptoError
+pub fn Mac::new(MacAlgorithm, Bytes) -> Self
+pub fn Mac::update(Self, Bytes) -> Unit
+
+pub enum MacAlgorithm {
+  HmacSha1
+  HmacSha256
+} derive(Eq, @debug.Debug)
+pub fn MacAlgorithm::hmac_sha1() -> Self
+pub fn MacAlgorithm::hmac_sha256() -> Self
+pub fn MacAlgorithm::output_len(Self) -> Int
+
+type MdCtx
+
+pub struct PKey {
+  ptr : Pkey
+}
+pub fn PKey::close(Self) -> Unit
+pub fn PKey::ec_curve_nid(Self) -> Int
+pub fn PKey::ed25519_pub_raw(Self) -> Bytes raise CryptoError
+pub fn PKey::from_dsa_components(Bytes, Bytes, Bytes, Bytes) -> Self raise CryptoError
+pub fn PKey::from_ec_point(String, Bytes) -> Self raise CryptoError
+pub fn PKey::from_rsa_components(Bytes, Bytes) -> Self raise CryptoError
+pub fn PKey::key_id(Self) -> Int
+pub fn PKey::load_private_key(String) -> Self raise CryptoError
+pub fn PKey::load_public_key(String) -> Self raise CryptoError
+pub fn PKey::rsa_get_bn(Self, String) -> Bytes raise CryptoError
+pub fn PKey::rsa_sign(Self, Int, Bytes) -> Bytes raise CryptoError
+pub fn PKey::sign(Self, Int, Bytes) -> Bytes raise CryptoError
+pub fn PKey::size(Self) -> Int
+pub fn PKey::verify(Self, Int, Bytes, Bytes) -> Bool raise CryptoError
+
+type Pkey
 
 // Type aliases
 

@@ -1,5 +1,9 @@
 #!/bin/bash
 set -e
+
+# .env is gitignored; seed from the tracked example when missing (CI etc.).
+[ -f .env ] || cp .env.example .env
+
 source .env
 
 moon clean

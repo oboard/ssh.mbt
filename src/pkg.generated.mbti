@@ -1,11 +1,468 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "PaiGack/ssh_client/src"
 
+import {
+  "PaiGack/ssh_client/src/crypto",
+  "PaiGack/ssh_client/src/socket",
+  "moonbitlang/core/bigint",
+  "moonbitlang/core/debug",
+}
+
 // Values
+pub const MAX_PACKET : Int = 262144
+
+pub const MSG_CHANNEL_CLOSE : Byte = b'\x61'
+
+pub const MSG_CHANNEL_DATA : Byte = b'\x5e'
+
+pub const MSG_CHANNEL_EOF : Byte = b'\x60'
+
+pub const MSG_CHANNEL_EXTENDED_DATA : Byte = b'\x5f'
+
+pub const MSG_CHANNEL_FAILURE : Byte = b'\x64'
+
+pub const MSG_CHANNEL_OPEN : Byte = b'\x5a'
+
+pub const MSG_CHANNEL_OPEN_CONFIRMATION : Byte = b'\x5b'
+
+pub const MSG_CHANNEL_OPEN_FAILURE : Byte = b'\x5c'
+
+pub const MSG_CHANNEL_REQUEST : Byte = b'\x62'
+
+pub const MSG_CHANNEL_SUCCESS : Byte = b'\x63'
+
+pub const MSG_CHANNEL_WINDOW_ADJUST : Byte = b'\x5d'
+
+pub const MSG_GLOBAL_REQUEST : Byte = b'\x50'
+
+pub const MSG_REQUEST_FAILURE : Byte = b'\x52'
+
+pub const MSG_REQUEST_SUCCESS : Byte = b'\x51'
+
+pub const SERVICE_USERAUTH : String = "ssh-userauth"
+
+pub const SSH_FXF_APPEND : Int = 0x00000004
+
+pub const SSH_FXF_CREAT : Int = 0x00000008
+
+pub const SSH_FXF_EXCL : Int = 0x00000020
+
+pub const SSH_FXF_READ : Int = 0x00000001
+
+pub const SSH_FXF_TRUNC : Int = 0x00000010
+
+pub const SSH_FXF_WRITE : Int = 0x00000002
+
+pub const SSH_MSG_DEBUG : Byte = b'\x04'
+
+pub const SSH_MSG_DISCONNECT : Byte = b'\x01'
+
+pub const SSH_MSG_EXT_INFO : Byte = b'\x07'
+
+pub const SSH_MSG_IGNORE : Byte = b'\x02'
+
+pub const SSH_MSG_KEXINIT : Byte = b'\x14'
+
+pub const SSH_MSG_KEX_DH_INIT : Byte = b'\x1e'
+
+pub const SSH_MSG_KEX_DH_REPLY : Byte = b'\x1f'
+
+pub const SSH_MSG_KEX_ECDH_INIT : Byte = b'\x1e'
+
+pub const SSH_MSG_KEX_ECDH_REPLY : Byte = b'\x1f'
+
+pub const SSH_MSG_NEWKEYS : Byte = b'\x15'
+
+pub fn build_channel_close(Int) -> Bytes
+
+pub fn build_channel_data(Int, Bytes) -> Bytes
+
+pub fn build_channel_eof(Int) -> Bytes
+
+pub fn build_channel_open(Int, Int, Int) -> Bytes
+
+pub fn build_channel_open_confirmation(Int, Int, Int, Int) -> Bytes
+
+pub fn build_channel_open_direct_tcpip(Int, Int, Int, String, Int, String, Int) -> Bytes
+
+pub fn build_channel_open_failure(Int, Int, String, String) -> Bytes
+
+pub fn build_channel_request_exec(Int, String) -> Bytes
+
+pub fn build_channel_request_pty(Int, String, Int, Int, Int, Int, Bytes) -> Bytes
+
+pub fn build_channel_request_shell(Int) -> Bytes
+
+pub fn build_channel_request_subsystem(Int, String) -> Bytes
+
+pub fn build_channel_window_adjust(Int, Int) -> Bytes
+
+pub fn build_dh_init_payload(@bigint.BigInt) -> Bytes
+
+pub fn build_ecdh_init_payload(Bytes) -> Bytes
+
+pub fn build_global_request_cancel_tcpip_forward(String, Int) -> Bytes
+
+pub fn build_global_request_tcpip_forward(String, Int) -> Bytes
+
+pub fn build_kexinit_payload(Bytes) -> Bytes
+
+pub fn build_newkeys_payload() -> Bytes
+
+pub fn build_publickey_signature_input(Bytes, String, String, String, Bytes) -> Bytes
+
+pub fn build_service_request(String) -> Bytes
+
+pub fn build_userauth_request(String, String, String, has_signature? : Bool, pubkey_alg? : String, pubkey_blob? : Bytes, signature? : Bytes, password? : String) -> Bytes
+
+pub fn compression_algorithms() -> Array[String]
+
+pub fn compute_dh_exchange_hash(@crypto.Algorithm, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes) -> Bytes raise @crypto.CryptoError
+
+pub fn compute_ecdh_exchange_hash(@crypto.Algorithm, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes, Bytes) -> Bytes raise @crypto.CryptoError
+
+pub fn debug(String) -> Unit
+
+pub fn decode_base64(String) -> Bytes raise SshError
+
+pub fn decode_uint32(Bytes) -> Int
+
+pub fn derive_keys(@crypto.Algorithm, Bytes, Bytes, Bytes, Int, Int, Int) -> (Bytes, Bytes, Bytes, Bytes, Bytes, Bytes) raise @crypto.CryptoError
+
+pub fn disable_debug() -> Unit
+
+pub fn enable_debug() -> Unit
+
+pub fn encode_base64(Bytes) -> String
+
+pub fn encode_mpint(@bigint.BigInt) -> Bytes
+
+pub fn encode_mpint_of_bytes(Bytes) -> Bytes
+
+pub fn encode_string(Bytes) -> Bytes
+
+pub fn encode_string_from_str(String) -> Bytes
+
+pub fn encode_uint32(Int) -> Bytes
+
+pub fn encryption_algorithms() -> Array[String]
+
+pub fn hex_dump(String, Bytes) -> Unit
+
+pub fn is_debug_enabled() -> Bool
+
+pub fn is_newkeys_payload(Bytes) -> Bool
+
+pub fn kex_algorithms() -> Array[String]
+
+pub fn mac_algorithms() -> Array[String]
+
+pub fn method_keyboard_interactive() -> String
+
+pub fn method_none() -> String
+
+pub fn method_password() -> String
+
+pub fn method_publickey() -> String
+
+pub fn parse_auth_reply(Bytes) -> AuthReply raise SshError
+
+pub fn parse_dh_reply_payload(Bytes) -> DhReply raise SshError
+
+pub fn parse_ecdh_reply_payload(Bytes) -> EcdhReply raise SshError
+
+pub fn parse_file(String) -> Array[KnownHost] raise SshError
+
+pub fn parse_host_key_algorithm(Bytes) -> String raise SshError
+
+pub fn parse_inbound_forwarded_tcpip(Reader) -> (Int, Int, Int, String, Int, String, Int) raise SshError
+
+pub fn parse_kexinit(Bytes) -> KexInit raise SshError
+
+pub fn parse_line(String) -> KnownHost? raise SshError
+
+pub fn parse_signature_blob(Bytes) -> SignatureBlob raise SshError
+
+pub fn read_packet((Int) -> Bytes raise SshError, Int, (Bytes) -> Bytes raise SshError, (Bytes, Bytes) -> Unit raise SshError) -> Bytes raise SshError
+
+pub fn server_host_key_algorithms() -> Array[String]
+
+pub fn write_packet(Bytes, Int, Bool, (Bytes) -> Bytes raise SshError) -> Bytes raise SshError
 
 // Errors
+pub suberror SshError {
+  IoError(String)
+  ConnectionClosed
+  ProtocolError(String)
+  MacMismatch
+  NotEncrypted
+  HostKeyMismatch(String)
+  AuthFailed(String)
+  RequestDenied(String)
+  ParseError(String)
+} derive(Eq, @debug.Debug)
 
 // Types and methods
+pub struct AuthContext {
+  user : String
+  service : String
+  mut state : AuthState
+}
+pub fn AuthContext::apply_reply(Self, AuthReply) -> Unit
+pub fn AuthContext::build_info_response(Self, Array[String]) -> Bytes
+pub fn AuthContext::build_initial(Self) -> Bytes
+pub fn AuthContext::build_keyboard_interactive(Self) -> Bytes
+pub fn AuthContext::build_password(Self, String) -> Bytes
+pub fn AuthContext::build_publickey_query(Self, String, Bytes) -> Bytes
+pub fn AuthContext::build_publickey_sign(Self, String, Bytes, Bytes) -> Bytes
+pub fn AuthContext::is_authenticated(Self) -> Bool
+pub fn AuthContext::new(String) -> Self
+
+pub enum AuthReply {
+  Success
+  Failure(Array[String], Bool)
+  PublicKeyOk(String, Bytes)
+  ServiceAccept
+} derive(Eq, @debug.Debug)
+
+pub enum AuthState {
+  Idle
+  AwaitingReply
+  AwaitingSignature(String, Bytes)
+  Authenticated
+  Rejected(Array[String])
+} derive(Eq, @debug.Debug)
+
+pub struct Channel {
+  mut peer_id : Int
+  mut remote_window : Int
+  remote_max_packet : Int
+  mut state : ChannelState
+  stdout_buf : Array[Byte]
+  stderr_buf : Array[Byte]
+  mut exit_status : Int?
+  mut exit_signal : String?
+  mut channel_type : ChannelType
+  mut data_sink : DataSink
+  // private fields
+}
+pub fn Channel::exit_status(Self) -> Int?
+pub fn Channel::handle_inbound(Self, Bytes) -> Array[Bytes] raise SshError
+pub fn Channel::has_stdout(Self) -> Bool
+pub fn Channel::id(Self) -> Int
+pub fn Channel::is_open(Self) -> Bool
+pub fn Channel::new(Int) -> Self
+pub fn Channel::peer_id(Self) -> Int
+pub fn Channel::state(Self) -> ChannelState
+pub fn Channel::take_stderr(Self) -> String
+pub fn Channel::take_stdout(Self) -> String
+
+pub enum ChannelState {
+  Closed
+  Opening
+  Open
+  ExecPending
+  EofReceived
+  Closing
+  Done
+} derive(Eq, @debug.Debug)
+
+pub enum ChannelType {
+  Session
+  DirectTcpip(String, Int)
+  ForwardedTcpip(String, Int)
+} derive(Eq, @debug.Debug)
+
+pub struct Client {
+  mut next_channel_id : Int
+  // private fields
+}
+pub fn Client::auth_auto(Self, String, key_path? : String) -> Unit raise SshError
+pub fn Client::auth_keyboard_interactive(Self, (String) -> String) -> Unit raise SshError
+pub fn Client::auth_password(Self, String) -> Unit raise SshError
+pub fn Client::auth_publickey(Self, String) -> Unit raise SshError
+pub fn Client::cancel_remote_forward(Self, String, Int) -> Unit raise SshError
+pub fn Client::close(Self) -> Unit
+pub fn Client::connect(ConnectOptions) -> Self raise SshError
+pub fn Client::default_banner() -> String
+pub fn Client::exec(Self, Channel, String) -> (String, String) raise SshError
+pub fn Client::forward_local_port(Self, Int, String, Int) -> Unit raise SshError
+pub fn Client::forward_remote_port(Self, Int, String, Int) -> Unit raise SshError
+pub fn Client::forward_socks5(Self, Int) -> Unit raise SshError
+pub fn Client::kex(Self) -> Unit raise SshError
+pub fn Client::open_session(Self) -> Channel
+pub fn Client::shell(Self, Channel) -> Unit raise SshError
+
+pub struct ConnectOptions {
+  host : String
+  port : Int
+  user : String
+  client_banner : String?
+  accept_host_key : (String, Bytes) -> Bool
+  timeout_ms : Int
+}
+pub fn ConnectOptions::new(String, Int, String) -> Self
+pub fn ConnectOptions::with_host_key_verifier(Self, (String, Bytes) -> Bool) -> Self
+
+pub enum DataSink {
+  Buffer
+  Socket(@socket.Tcp)
+}
+
+pub struct DerivedKeys {
+  iv_c2s : Bytes
+  iv_s2c : Bytes
+  enc_key_c2s : Bytes
+  enc_key_s2c : Bytes
+  mac_key_c2s : Bytes
+  mac_key_s2c : Bytes
+}
+
+pub struct DhReply {
+  host_key : Bytes
+  f : @bigint.BigInt
+  signature : Bytes
+}
+
+pub struct EcdhReply {
+  host_key : Bytes
+  server_public : Bytes
+  signature : Bytes
+}
+
+pub struct KexContext {
+  mut state : KexState
+  mut kex_alg : String
+  mut host_key_alg : String
+  mut enc_alg : String
+  mut mac_alg : String
+  mut comp_alg : String
+  v_c : Bytes
+  v_s : Bytes
+  i_c : Bytes
+  mut i_s : Bytes
+  cookie : Bytes
+  mut peer_host_key : Bytes
+  mut exchange_hash : Bytes
+  mut shared_secret : Bytes
+  mut session_id : Bytes
+  mut session_id_set : Bool
+}
+pub fn KexContext::derive_session_keys(Self) -> DerivedKeys raise SshError
+pub fn KexContext::drive(Self, () -> Bytes raise SshError, (Bytes) -> Unit raise SshError, (String, Bytes) -> Bool) -> Unit raise SshError
+pub fn KexContext::new(Bytes, Bytes) -> Self
+
+pub struct KexInit {
+  cookie : Bytes
+  kex_algs : Array[String]
+  host_key_algs : Array[String]
+  enc_c2s : Array[String]
+  enc_s2c : Array[String]
+  mac_c2s : Array[String]
+  mac_s2c : Array[String]
+  comp_c2s : Array[String]
+  comp_s2c : Array[String]
+}
+pub fn KexInit::first(Self) -> String?
+pub fn KexInit::first_comp(Self) -> String?
+pub fn KexInit::first_enc(Self) -> String?
+pub fn KexInit::first_host_key(Self) -> String?
+pub fn KexInit::first_mac(Self) -> String?
+
+pub enum KexState {
+  Initial
+  SentKexinit
+  Negotiating
+  SentDhInit
+  ComputingHash
+  ReadyForNewKeys
+  InstallKeys
+  Done
+} derive(Eq, @debug.Debug)
+
+pub struct KnownHost {
+  patterns : Array[String]
+  key_alg : String
+  key : Bytes
+}
+pub fn KnownHost::alg(Self) -> String
+pub fn KnownHost::format_entry(Self) -> String
+pub fn KnownHost::key_bytes(Self) -> Bytes
+pub fn KnownHost::matches(Self, String, Int) -> Bool
+
+pub struct Reader {
+  // private fields
+}
+pub fn Reader::eof(Self) -> Bool
+pub fn Reader::new(Bytes) -> Self
+pub fn Reader::pos(Self) -> Int
+pub fn Reader::read_byte(Self) -> Byte raise SshError
+pub fn Reader::read_bytes(Self, Int) -> Bytes raise SshError
+pub fn Reader::read_mpint(Self) -> @bigint.BigInt raise SshError
+pub fn Reader::read_name_list(Self) -> Array[String] raise SshError
+pub fn Reader::read_string(Self) -> Bytes raise SshError
+pub fn Reader::read_string_as_str(Self) -> String raise SshError
+pub fn Reader::read_uint32(Self) -> Int raise SshError
+pub fn Reader::remaining(Self) -> Int
+pub fn Reader::rest(Self) -> Bytes
+
+pub struct SftpAttrs {
+  flags : Int
+  size : Int?
+  uid : Int?
+  gid : Int?
+  permissions : Int?
+  atime : Int?
+  mtime : Int?
+}
+
+pub struct SftpClient {
+  mut request_id : Int
+  // private fields
+}
+pub fn SftpClient::close(Self) -> Unit
+pub fn SftpClient::close_handle(Self, Bytes) -> Unit raise SshError
+pub fn SftpClient::listdir(Self, String) -> Array[SftpDirEntry] raise SshError
+pub fn SftpClient::mkdir(Self, String, Int) -> Unit raise SshError
+pub fn SftpClient::open(Client) -> Self raise SshError
+pub fn SftpClient::open_file(Self, String, Int) -> Bytes raise SshError
+pub fn SftpClient::read(Self, Bytes, Int, Int) -> Bytes raise SshError
+pub fn SftpClient::read_file(Self, String) -> Bytes raise SshError
+pub fn SftpClient::readdir(Self, Bytes) -> Array[SftpDirEntry]? raise SshError
+pub fn SftpClient::realpath(Self, String) -> String raise SshError
+pub fn SftpClient::remove(Self, String) -> Unit raise SshError
+pub fn SftpClient::rename(Self, String, String) -> Unit raise SshError
+pub fn SftpClient::rmdir(Self, String) -> Unit raise SshError
+pub fn SftpClient::stat(Self, String) -> SftpAttrs raise SshError
+pub fn SftpClient::write(Self, Bytes, Int, Bytes) -> Unit raise SshError
+pub fn SftpClient::write_file(Self, String, Bytes, Int) -> Unit raise SshError
+
+pub struct SftpDirEntry {
+  filename : String
+  longname : String
+  attrs : SftpAttrs
+}
+
+type SftpError derive(Eq, @debug.Debug)
+
+pub struct SignatureBlob {
+  alg : String
+  sig : Bytes
+}
+
+pub struct Writer {
+  // private fields
+}
+pub fn Writer::length(Self) -> Int
+pub fn Writer::new() -> Self
+pub fn Writer::to_bytes(Self) -> Bytes
+pub fn Writer::write_byte(Self, Byte) -> Unit
+pub fn Writer::write_bytes(Self, Bytes) -> Unit
+pub fn Writer::write_mpint(Self, @bigint.BigInt) -> Unit
+pub fn Writer::write_name_list(Self, Array[String]) -> Unit
+pub fn Writer::write_string(Self, Bytes) -> Unit
+pub fn Writer::write_string_from_str(Self, String) -> Unit
+pub fn Writer::write_uint32(Self, Int) -> Unit
 
 // Type aliases
 

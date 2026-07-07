@@ -1,11 +1,37 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "PaiGack/ssh_client/src/socket"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
+pub fn set_debug(Bool) -> Unit
 
 // Errors
+pub suberror IoError {
+  IoError(String)
+} derive(Eq, @debug.Debug)
 
 // Types and methods
+pub struct Tcp {
+  handle : Int
+  host : String
+  port : Int
+}
+pub fn Tcp::accept(Self) -> Self raise
+pub fn Tcp::bind_listen(Int, backlog? : Int) -> Self raise
+pub fn Tcp::close(Self) -> Unit
+pub fn Tcp::connect_to_host(String, port~ : Int) -> Self raise
+pub fn Tcp::has_data(Self) -> Bool
+pub fn Tcp::has_pending_connection(Self) -> Bool
+pub fn Tcp::read_exact(Self, Int) -> Bytes raise
+pub fn Tcp::read_line(Self) -> String raise
+pub fn Tcp::read_until_newline(Self) -> Bytes raise
+pub fn Tcp::recv(Self, Bytes, Int, Int) -> Int
+pub fn Tcp::set_nonblocking(Self) -> Unit raise
+pub fn Tcp::write(Self, String) -> Unit raise
+pub fn Tcp::write_bytes(Self, Bytes) -> Unit raise
 
 // Type aliases
 

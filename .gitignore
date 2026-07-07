@@ -7,3 +7,8 @@ target
 .claude
 CNB_VSCODE_PROXY_URI
 .workbuddy
+
+# Local environment files (use .env.example as the tracked placeholder).
+.env
+.env.*
+!.env.example

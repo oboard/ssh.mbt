@@ -1,0 +1,16 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "PaiGack/ssh_client/cmd/forwarding"
+
+// Values
+
+// Errors
+
+// Types and methods
+type ForwardMode
+
+type ParsedArgs
+
+// Type aliases
+
+// Traits
+
