@@ -1,9 +1,43 @@
-run-name: 'abc'
-name: 'abc'
+name: Test
+
+on:
+  push:
+  pull_request:
+
 jobs:
-  actions:
-    runs-on: 'abc'
+  check:
+    name: Moon Check and Test
+    runs-on: ubuntu-latest
     steps:
-      - run: 'abc'
-      - name: 'abc'
-        uses: 'abc'
+      - uses: actions/checkout@v4
+
+      - name: Setup Moon env (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libssl-dev
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITEA_PATH"
+          # export PATH="$HOME/.moon/bin:$PATH"
+
+      - name: Moon Check
+        run: |
+          moon fmt --check
+          moon check --deny-warn
+          moon info
+          git diff --exit-code
+          git status
+
+      - name: Moon Test
+        run: |
+          echo moon test
+          moon test --deny-warn --enable-coverage
+          moon coverage report -f summary
+
+          moon coverage analyze
+
+          # ffi test
+          echo moon test native
+          moon test --deny-warn --target native --enable-coverage
+          moon coverage report -f summary
+
+          moon coverage analyze
