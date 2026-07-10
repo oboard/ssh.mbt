@@ -1,0 +1,20 @@
+version: 2
+name: test
+description: ""
+global:
+  concurrent: 1
+workflow:
+  - ref: start
+    name: 开始
+    task: start
+  - ref: shell_0
+    name: shell
+    image: docker.jianmuhub.com/library/ubuntu:22.04
+    needs:
+      - start
+  - ref: end
+    name: 结束
+    task: end
+    needs:
+      - shell_0
+
