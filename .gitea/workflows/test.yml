@@ -1,0 +1,9 @@
+run-name: 'abc'
+name: 'abc'
+jobs:
+  actions:
+    runs-on: 'abc'
+    steps:
+      - run: 'abc'
+      - name: 'abc'
+        uses: 'abc'
