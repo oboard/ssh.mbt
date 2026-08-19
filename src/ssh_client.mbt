@@ -119,19 +119,19 @@ pub fn Client::default_banner() -> String {
 
 ///|
 /// 连接 SSH 服务器并完成 banner 交换。不执行 KEX 或认证。
-pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
+pub async fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
   let conn = @socket.Tcp::connect_to_host(opts.host, port=opts.port) catch {
-    e => raise IoError("connect: \{e}")
+    e => raise IoError("connect: \{Repr(e)}")
   }
   let client_banner = match opts.client_banner {
     Some(b) => b
     None => Client::default_banner()
   }
   conn.write("\{client_banner}\r\n") catch {
-    e => raise IoError("write banner: \{e}")
+    e => raise IoError("write banner: \{Repr(e)}")
   }
   let banner_bytes = conn.read_until_newline() catch {
-    e => raise IoError("read banner: \{e}")
+    e => raise IoError("read banner: \{Repr(e)}")
   }
   if !banner_bytes.has_prefix(b"SSH-") {
     raise ProtocolError("server banner missing SSH- prefix")
@@ -165,7 +165,7 @@ pub fn Client::connect(opts : ConnectOptions) -> Client raise SshError {
 
 ///|
 /// 执行密钥交换。
-pub fn Client::kex(self : Client) -> Unit raise SshError {
+pub async fn Client::kex(self : Client) -> Unit raise SshError {
   let policy = self.host_key_policy
   let host = self.host
   let port = self.port
@@ -198,7 +198,7 @@ pub fn Client::kex(self : Client) -> Unit raise SshError {
 
 ///|
 /// 密码认证。
-pub fn Client::auth_password(
+pub async fn Client::auth_password(
   self : Client,
   password : String,
 ) -> Unit raise SshError {
@@ -230,7 +230,7 @@ pub fn Client::auth_password(
 /// 公钥认证（two-step）。自动适配 ssh-rsa / ssh-ed25519。
 /// 私钥路径支持 PEM（PKCS#1/PKCS#8/传统）和 OpenSSH openssh-key-v1 格式。
 /// 对应的 .pub 文件必须是 OpenSSH 单行格式：`<alg> <base64> <comment>`。
-pub fn Client::auth_publickey(
+pub async fn Client::auth_publickey(
   self : Client,
   private_key_path : String,
 ) -> Unit raise SshError {
@@ -332,7 +332,7 @@ pub fn Client::auth_publickey(
 
 ///|
 /// keyboard-interactive 认证。
-pub fn Client::auth_keyboard_interactive(
+pub async fn Client::auth_keyboard_interactive(
   self : Client,
   answer_fn : (String) -> String,
 ) -> Unit raise SshError {
@@ -375,7 +375,7 @@ pub fn Client::auth_keyboard_interactive(
 
 ///|
 /// 自动回退认证（none → publickey → password）。
-pub fn Client::auth_auto(
+pub async fn Client::auth_auto(
   self : Client,
   password : String,
   key_path? : String,
@@ -449,7 +449,7 @@ pub fn Client::open_session(self : Client) -> Channel {
 
 ///|
 /// 在远程主机上执行命令，阻塞直到命令结束。返回 `(stdout, stderr)`。
-pub fn Client::exec(
+pub async fn Client::exec(
   self : Client,
   channel : Channel,
   command : String,
@@ -506,7 +506,10 @@ pub fn Client::exec(
 
 ///|
 /// 请求远程 shell。发送 shell 请求后立即返回（非阻塞），后续通过 channel 交互。
-pub fn Client::shell(self : Client, channel : Channel) -> Unit raise SshError {
+pub async fn Client::shell(
+  self : Client,
+  channel : Channel,
+) -> Unit raise SshError {
   // 1. 打开通道
   let open_msg = build_channel_open(channel.id(), 1024 * 1024, 32 * 1024)
   self.write_packet(open_msg)
@@ -546,23 +549,21 @@ pub fn Client::close(self : Client) -> Unit {
 /// - `local_port`：本地监听端口
 /// - `remote_host`：通过 SSH 连接的目标主机
 /// - `remote_port`：通过 SSH 连接的目标端口
-pub fn Client::forward_local_port(
+pub async fn Client::forward_local_port(
   self : Client,
   local_port : Int,
   remote_host : String,
   remote_port : Int,
 ) -> Unit raise SshError {
-  let listener = @socket.Tcp::bind_listen(local_port) catch {
-    e => raise IoError("bind local port \{local_port}: \{e}")
-  }
+  let listener = bind_tcp_listener(local_port)
   debug(
     "* forward_local: listening on 127.0.0.1:\{local_port} → \{remote_host}:\{remote_port}",
   )
 
   while true {
-    let local_conn = listener.accept() catch {
+    let local_conn = accept_tcp(listener) catch {
       e => {
-        debug("* forward_local: accept error: \{e}")
+        debug("* forward_local: accept error: \{Repr(e)}")
         continue
       }
     }
@@ -581,7 +582,7 @@ pub fn Client::forward_local_port(
 /// - `remote_port`：远端监听端口
 /// - `local_host`：本地目标主机
 /// - `local_port`：本地目标端口
-pub fn Client::forward_remote_port(
+pub async fn Client::forward_remote_port(
   self : Client,
   remote_port : Int,
   local_host : String,
@@ -617,19 +618,17 @@ pub fn Client::forward_remote_port(
 /// 阻塞运行直到连接断开或出错。
 ///
 /// - `local_port`：本地 SOCKS5 监听端口
-pub fn Client::forward_socks5(
+pub async fn Client::forward_socks5(
   self : Client,
   local_port : Int,
 ) -> Unit raise SshError {
-  let listener = @socket.Tcp::bind_listen(local_port) catch {
-    e => raise IoError("bind SOCKS5 port \{local_port}: \{e}")
-  }
+  let listener = bind_tcp_listener(local_port)
   debug("* SOCKS5 proxy listening on 127.0.0.1:\{local_port}")
 
   while true {
-    let conn = listener.accept() catch {
+    let conn = accept_tcp(listener) catch {
       e => {
-        debug("* SOCKS5: accept error: \{e}")
+        debug("* SOCKS5: accept error: \{Repr(e)}")
         continue
       }
     }
@@ -639,7 +638,7 @@ pub fn Client::forward_socks5(
 
 ///|
 /// 取消远程端口转发。
-pub fn Client::cancel_remote_forward(
+pub async fn Client::cancel_remote_forward(
   self : Client,
   address : String,
   port : Int,
@@ -661,7 +660,7 @@ pub fn Client::cancel_remote_forward(
 
 ///|
 /// 打开 direct-tcpip 通道（本地转发用）。
-fn Client::open_direct_tcpip(
+async fn Client::open_direct_tcpip(
   self : Client,
   host : String,
   port : Int,
@@ -708,22 +707,16 @@ fn Client::open_direct_tcpip(
 ///|
 /// 双向数据中继：local_socket ↔ SSH channel。
 /// 使用 select 轮询避免阻塞任一方向。
-fn Client::relay_data(
+async fn Client::relay_data(
   self : Client,
   ch : Channel,
   local_socket : @socket.Tcp,
 ) -> Unit raise SshError {
   // 设置数据去向为 socket（SSH 通道数据直接写入本地 socket）
-  ch.data_sink = Socket(local_socket)
-
   // 设置本地 socket 为非阻塞
-  local_socket.set_nonblocking() catch {
-    e => debug("* relay_data: set_nonblocking failed: \{e}")
-  }
-
   while ch.state() != Done && ch.state() != Closed {
     // 方向 A: SSH → 本地 socket
-    let payload = self.read_packet_nonblocking()
+    let payload = self.read_packet_nonblocking() catch { _ => None }
     match payload {
       Some(data) => {
         let responses = ch.handle_inbound(data)
@@ -741,29 +734,26 @@ fn Client::relay_data(
       None => ()
     }
 
-    // 方向 B: 本地 socket → SSH
-    if local_socket.has_data() {
-      let buf = Bytes::new(32 * 1024)
-      let n = local_socket.recv(buf, 0, 32 * 1024)
-      if n > 0 {
-        let view = Bytes::get_view(buf, start=0, end=n)
-        match view {
-          Some(v) => {
-            let data = BytesView::to_owned(v)
-            let msg = build_channel_data(ch.peer_id(), data)
-            self.write_packet(msg) catch {
-              _ => break
-            }
-          }
-          None => break
+    // 方向 B: 本地 socket → SSH。短超时让两方向公平推进。
+    let local_data = @async.with_timeout_opt(1, async fn() {
+      local_socket.read_some(max_len=32 * 1024)
+    }) catch {
+      _ => None
+    }
+    match local_data {
+      Some(Some(data)) => {
+        let msg = build_channel_data(ch.peer_id(), data)
+        self.write_packet(msg) catch {
+          _ => break
         }
-      } else if n == 0 {
-        // 本地连接关闭, 发送 EOF
+      }
+      Some(None) => {
         self.write_packet(build_channel_eof(ch.peer_id())) catch {
           _ => ()
         }
         break
       }
+      None => ()
     }
   }
 
@@ -778,7 +768,7 @@ fn Client::relay_data(
 
 ///|
 /// 远程转发事件循环。
-fn Client::remote_forward_loop(
+async fn Client::remote_forward_loop(
   self : Client,
   local_host : String,
   local_port : Int,
@@ -805,7 +795,7 @@ fn Client::remote_forward_loop(
           ) catch {
             e => {
               debug(
-                "* remote forward: cannot connect to local \{local_host}:\{local_port}: \{e}",
+                "* remote forward: cannot connect to local \{local_host}:\{local_port}: \{Repr(e)}",
               )
               let fail_msg = build_channel_open_failure(
                 sender_ch, 2, "connect failed", "en",
@@ -870,7 +860,7 @@ fn Client::remote_forward_loop(
 
 ///|
 /// 处理单个 SOCKS5 连接。
-fn Client::handle_socks5_connection(
+async fn Client::handle_socks5_connection(
   self : Client,
   conn : @socket.Tcp,
 ) -> Unit raise SshError {
@@ -910,10 +900,10 @@ fn Client::handle_socks5_connection(
 
 ///|
 /// SOCKS5 握手 + CONNECT 请求解析。返回 (target_host, target_port)。
-fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
+async fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
   // 1. 读取客户端握手
   let buf = conn.read_exact(2) catch {
-    e => raise IoError("socks5: read handshake: \{e}")
+    e => raise IoError("socks5: read handshake: \{Repr(e)}")
   }
   let ver = buf.unsafe_get(0)
   let nmethods = buf.unsafe_get(1).to_int()
@@ -921,17 +911,17 @@ fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
     raise ProtocolError("socks5: unsupported version")
   }
   let _methods = conn.read_exact(nmethods) catch {
-    e => raise IoError("socks5: read methods: \{e}")
+    e => raise IoError("socks5: read methods: \{Repr(e)}")
   }
 
   // 2. 回复: 无需认证 (0x00)
   conn.write_bytes(b"\x05\x00") catch {
-    e => raise IoError("socks5: write auth reply: \{e}")
+    e => raise IoError("socks5: write auth reply: \{Repr(e)}")
   }
 
   // 3. 读取 CONNECT 请求
   let header = conn.read_exact(4) catch {
-    e => raise IoError("socks5: read request: \{e}")
+    e => raise IoError("socks5: read request: \{Repr(e)}")
   }
   let cmd = header.unsafe_get(1)
   if cmd != b'\x01' {
@@ -946,10 +936,10 @@ fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
   match atyp {
     b'\x01' => {
       let addr = conn.read_exact(4) catch {
-        e => raise IoError("socks5: read ipv4: \{e}")
+        e => raise IoError("socks5: read ipv4: \{Repr(e)}")
       }
       let port_raw = conn.read_exact(2) catch {
-        e => raise IoError("socks5: read port: \{e}")
+        e => raise IoError("socks5: read port: \{Repr(e)}")
       }
       let ip = ipv4_bytes_to_string(addr)
       let p = (port_raw.unsafe_get(0).to_int() << 8) |
@@ -958,13 +948,13 @@ fn socks5_handshake(conn : @socket.Tcp) -> (String, Int) raise SshError {
     }
     b'\x03' => {
       let len_raw = conn.read_exact(1) catch {
-        e => raise IoError("socks5: read domain len: \{e}")
+        e => raise IoError("socks5: read domain len: \{Repr(e)}")
       }
       let domain = conn.read_exact(len_raw.unsafe_get(0).to_int()) catch {
-        e => raise IoError("socks5: read domain: \{e}")
+        e => raise IoError("socks5: read domain: \{Repr(e)}")
       }
       let port_raw = conn.read_exact(2) catch {
-        e => raise IoError("socks5: read port: \{e}")
+        e => raise IoError("socks5: read port: \{Repr(e)}")
       }
       let host = bytes_to_utf8_string(domain)
       let p = (port_raw.unsafe_get(0).to_int() << 8) |
@@ -1009,7 +999,9 @@ fn ipv4_bytes_to_string(addr : Bytes) -> String {
 /// - `IGNORE`(2) / `DEBUG`(4) / `EXT_INFO`(7)：跳过
 /// - `DISCONNECT`(1)：抛错
 /// - `REQUEST_SUCCESS`(81) / `REQUEST_FAILURE`(82)：返回该包
-fn Client::read_global_request_reply(self : Client) -> Bytes raise SshError {
+async fn Client::read_global_request_reply(
+  self : Client,
+) -> Bytes raise SshError {
   while true {
     let payload = self.read_packet()
     if payload.length() == 0 {
@@ -1046,7 +1038,7 @@ fn Client::read_global_request_reply(self : Client) -> Bytes raise SshError {
 
 ///|
 /// 读取加密包，自动跳过 IGNORE(2)、DEBUG(4)、EXT_INFO(7) 消息。
-fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
+async fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
   while true {
     let payload = self.read_encrypted_packet()
     if payload.length() == 0 {
@@ -1064,7 +1056,7 @@ fn Client::read_auth_packet(self : Client) -> Bytes raise SshError {
 
 ///|
 /// 读取一个 SSH 包（根据加密状态自动选择明文或密文读取）。
-fn Client::read_packet(self : Client) -> Bytes raise SshError {
+async fn Client::read_packet(self : Client) -> Bytes raise SshError {
   if self.encrypted {
     self.read_encrypted_packet()
   } else {
@@ -1075,20 +1067,18 @@ fn Client::read_packet(self : Client) -> Bytes raise SshError {
 ///|
 /// 非阻塞读取一个 SSH 包。底层 socket 无数据时返回 None。
 /// 用于端口转发的数据中继循环，避免阻塞某一方向。
-fn Client::read_packet_nonblocking(self : Client) -> Bytes? raise SshError {
-  match self.conn {
-    Connected(conn) => {
-      if !conn.has_data() {
-        return None
-      }
-      Some(self.read_packet())
-    }
+async fn Client::read_packet_nonblocking(self : Client) -> Bytes? {
+  @async.with_timeout_opt(1, async fn() { self.read_packet() }) catch {
+    _ => None
   }
 }
 
 ///|
 /// 写出一个 SSH 包（根据加密状态自动选择明文或密文写出）。
-fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
+async fn Client::write_packet(
+  self : Client,
+  payload : Bytes,
+) -> Unit raise SshError {
   if self.encrypted {
     self.write_encrypted_packet(payload)
   } else {
@@ -1098,16 +1088,16 @@ fn Client::write_packet(self : Client, payload : Bytes) -> Unit raise SshError {
 
 ///|
 /// 读取明文 SSH 包（KEX 阶段使用）。
-fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
+async fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) => {
       let len_raw = conn.read_exact(4) catch {
-        e => raise IoError("read packet len: \{e}")
+        e => raise IoError("read packet len: \{Repr(e)}")
       }
       let pkt_len = decode_uint32(len_raw)
       debug("read_plain: pkt_len=\{pkt_len}, seq_recv=\{self.seq_recv}")
       let body = conn.read_exact(pkt_len) catch {
-        e => raise IoError("read packet body (expect \{pkt_len}): \{e}")
+        e => raise IoError("read packet body (expect \{pkt_len}): \{Repr(e)}")
       }
       hex_dump("Plain packet", len_raw + body)
       self.seq_recv = self.seq_recv + 1U
@@ -1131,7 +1121,7 @@ fn Client::read_plain_packet(self : Client) -> Bytes raise SshError {
 
 ///|
 /// 写出明文 SSH 包（KEX 阶段使用）。
-fn Client::write_plain_packet(
+async fn Client::write_plain_packet(
   self : Client,
   payload : Bytes,
 ) -> Unit raise SshError {
@@ -1146,7 +1136,7 @@ fn Client::write_plain_packet(
   match self.conn {
     Connected(conn) =>
       conn.write_bytes(packet) catch {
-        e => raise IoError("write packet: \{e}")
+        e => raise IoError("write packet: \{Repr(e)}")
       }
   }
   self.seq_send = self.seq_send + 1U
@@ -1223,7 +1213,7 @@ fn parse_mac_algorithm(name : String) -> @crypto.MacAlgorithm raise SshError {
 ///|
 /// 读取加密 SSH 包：解密 + MAC 验证 + 去 padding。
 /// 使用 AES-CTR 流加密模式，整个包（含长度字段）都被加密。
-fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
+async fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
   match self.conn {
     Connected(conn) => {
       let cipher = match self.cipher_s2c {
@@ -1257,7 +1247,7 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
       let total = packet_length + mac_size
       debug("* read_packet: reading \{total} more bytes")
       let raw = conn.read_exact(total) catch {
-        e => raise IoError("read pkt body: \{e}")
+        e => raise IoError("read pkt body: \{Repr(e)}")
       }
 
       let full_packet = enc_len + raw
@@ -1344,7 +1334,7 @@ fn Client::read_encrypted_packet(self : Client) -> Bytes raise SshError {
 
 ///|
 /// 写出加密 SSH 包：padding + 加密 + MAC。
-fn Client::write_encrypted_packet(
+async fn Client::write_encrypted_packet(
   self : Client,
   payload : Bytes,
 ) -> Unit raise SshError {

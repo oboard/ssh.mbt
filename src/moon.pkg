@@ -2,8 +2,10 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/bigint",
+  "moonbitlang/async",
+  "moonbitlang/async/socket",
+  "moonbitlang/async/io",
   "PaiGack/ssh_client/src/crypto",
-  "PaiGack/ssh_client/src/socket",
 }
 
 options(

@@ -3,7 +3,6 @@ package "PaiGack/ssh_client/src"
 
 import {
   "PaiGack/ssh_client/src/crypto",
-  "PaiGack/ssh_client/src/socket",
   "moonbitlang/core/bigint",
   "moonbitlang/core/debug",
 }
@@ -251,7 +250,7 @@ pub struct Channel {
   mut exit_status : Int?
   mut exit_signal : String?
   mut channel_type : ChannelType
-  mut data_sink : DataSink
+  data_sink : DataSink
   mut open_failure_reason : Int?
   mut open_failure_message : String?
   // private fields
@@ -289,21 +288,21 @@ pub struct Client {
   mut next_channel_id : Int
   // private fields
 }
-pub fn Client::auth_auto(Self, String, key_path? : String) -> Unit raise SshError
-pub fn Client::auth_keyboard_interactive(Self, (String) -> String) -> Unit raise SshError
-pub fn Client::auth_password(Self, String) -> Unit raise SshError
-pub fn Client::auth_publickey(Self, String) -> Unit raise SshError
-pub fn Client::cancel_remote_forward(Self, String, Int) -> Unit raise SshError
+pub async fn Client::auth_auto(Self, String, key_path? : String) -> Unit raise SshError
+pub async fn Client::auth_keyboard_interactive(Self, (String) -> String) -> Unit raise SshError
+pub async fn Client::auth_password(Self, String) -> Unit raise SshError
+pub async fn Client::auth_publickey(Self, String) -> Unit raise SshError
+pub async fn Client::cancel_remote_forward(Self, String, Int) -> Unit raise SshError
 pub fn Client::close(Self) -> Unit
-pub fn Client::connect(ConnectOptions) -> Self raise SshError
+pub async fn Client::connect(ConnectOptions) -> Self raise SshError
 pub fn Client::default_banner() -> String
-pub fn Client::exec(Self, Channel, String) -> (String, String) raise SshError
-pub fn Client::forward_local_port(Self, Int, String, Int) -> Unit raise SshError
-pub fn Client::forward_remote_port(Self, Int, String, Int) -> Unit raise SshError
-pub fn Client::forward_socks5(Self, Int) -> Unit raise SshError
-pub fn Client::kex(Self) -> Unit raise SshError
+pub async fn Client::exec(Self, Channel, String) -> (String, String) raise SshError
+pub async fn Client::forward_local_port(Self, Int, String, Int) -> Unit raise SshError
+pub async fn Client::forward_remote_port(Self, Int, String, Int) -> Unit raise SshError
+pub async fn Client::forward_socks5(Self, Int) -> Unit raise SshError
+pub async fn Client::kex(Self) -> Unit raise SshError
 pub fn Client::open_session(Self) -> Channel
-pub fn Client::shell(Self, Channel) -> Unit raise SshError
+pub async fn Client::shell(Self, Channel) -> Unit raise SshError
 
 pub struct ConnectOptions {
   host : String
@@ -321,7 +320,6 @@ pub fn ConnectOptions::with_trust_on_first_use(Self, String, (String, String, By
 
 pub enum DataSink {
   Buffer
-  Socket(@socket.Tcp)
 }
 
 pub struct DerivedKeys {
@@ -379,7 +377,7 @@ pub struct KexContext {
   mut session_id_set : Bool
 }
 pub fn KexContext::derive_session_keys(Self) -> DerivedKeys raise SshError
-pub fn KexContext::drive(Self, () -> Bytes raise SshError, (Bytes) -> Unit raise SshError, (String, Bytes) -> Unit raise SshError) -> Unit raise SshError
+pub async fn KexContext::drive(Self, async () -> Bytes raise SshError, async (Bytes) -> Unit raise SshError, (String, Bytes) -> Unit raise SshError) -> Unit raise SshError
 pub fn KexContext::new(Bytes, Bytes) -> Self
 
 pub struct KexInit {
@@ -450,22 +448,22 @@ pub struct SftpClient {
   mut request_id : Int
   // private fields
 }
-pub fn SftpClient::close(Self) -> Unit
-pub fn SftpClient::close_handle(Self, Bytes) -> Unit raise SshError
-pub fn SftpClient::listdir(Self, String) -> Array[SftpDirEntry] raise SshError
-pub fn SftpClient::mkdir(Self, String, Int) -> Unit raise SshError
-pub fn SftpClient::open(Client) -> Self raise SshError
-pub fn SftpClient::open_file(Self, String, Int) -> Bytes raise SshError
-pub fn SftpClient::read(Self, Bytes, Int, Int) -> Bytes raise SshError
-pub fn SftpClient::read_file(Self, String) -> Bytes raise SshError
-pub fn SftpClient::readdir(Self, Bytes) -> Array[SftpDirEntry]? raise SshError
-pub fn SftpClient::realpath(Self, String) -> String raise SshError
-pub fn SftpClient::remove(Self, String) -> Unit raise SshError
-pub fn SftpClient::rename(Self, String, String) -> Unit raise SshError
-pub fn SftpClient::rmdir(Self, String) -> Unit raise SshError
-pub fn SftpClient::stat(Self, String) -> SftpAttrs raise SshError
-pub fn SftpClient::write(Self, Bytes, Int, Bytes) -> Unit raise SshError
-pub fn SftpClient::write_file(Self, String, Bytes, Int) -> Unit raise SshError
+pub async fn SftpClient::close(Self) -> Unit
+pub async fn SftpClient::close_handle(Self, Bytes) -> Unit raise SshError
+pub async fn SftpClient::listdir(Self, String) -> Array[SftpDirEntry] raise SshError
+pub async fn SftpClient::mkdir(Self, String, Int) -> Unit raise SshError
+pub async fn SftpClient::open(Client) -> Self raise SshError
+pub async fn SftpClient::open_file(Self, String, Int) -> Bytes raise SshError
+pub async fn SftpClient::read(Self, Bytes, Int, Int) -> Bytes raise SshError
+pub async fn SftpClient::read_file(Self, String) -> Bytes raise SshError
+pub async fn SftpClient::readdir(Self, Bytes) -> Array[SftpDirEntry]? raise SshError
+pub async fn SftpClient::realpath(Self, String) -> String raise SshError
+pub async fn SftpClient::remove(Self, String) -> Unit raise SshError
+pub async fn SftpClient::rename(Self, String, String) -> Unit raise SshError
+pub async fn SftpClient::rmdir(Self, String) -> Unit raise SshError
+pub async fn SftpClient::stat(Self, String) -> SftpAttrs raise SshError
+pub async fn SftpClient::write(Self, Bytes, Int, Bytes) -> Unit raise SshError
+pub async fn SftpClient::write_file(Self, String, Bytes, Int) -> Unit raise SshError
 
 pub struct SftpDirEntry {
   filename : String

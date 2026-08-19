@@ -511,7 +511,6 @@ test "channel/new_has_buffer_sink" {
   let ch = Channel::new(1)
   match ch.data_sink {
     Buffer => ()
-    Socket(_) => fail("expected Buffer sink")
   }
 }
 

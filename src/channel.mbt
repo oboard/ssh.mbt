@@ -80,7 +80,7 @@ pub struct Channel {
   /// 通道类型（session / direct-tcpip / forwarded-tcpip）
   mut channel_type : ChannelType
   /// 数据去向（缓冲区或直连 socket）
-  mut data_sink : DataSink
+  data_sink : DataSink
   /// OPEN_FAILURE 服务端返回的原因码（RFC 4254 §5.1）；未失败时为 None
   mut open_failure_reason : Int?
   /// OPEN_FAILURE 服务端返回的可读描述；未失败时为 None
@@ -109,10 +109,9 @@ pub enum ChannelType {
 } derive(Eq, Debug)
 
 ///|
-/// 通道数据处理方式。
+/// 通道数据处理方式。转发层从缓冲区异步写入 TCP，保持通道状态机同步。
 pub enum DataSink {
   Buffer
-  Socket(@socket.Tcp)
 }
 
 ///|
@@ -498,10 +497,6 @@ pub fn Channel::handle_inbound(
         Buffer =>
           for b in data {
             self.stdout_buf.push(b)
-          }
-        Socket(sock) =>
-          sock.write_bytes(data) catch {
-            e => debug("* channel data → socket write failed: \{e}")
           }
       }
       [build_channel_window_adjust(self.peer_id, self.local_max_packet)]

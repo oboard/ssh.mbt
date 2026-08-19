@@ -535,16 +535,16 @@ fn is_dh_alg(alg : String) -> Bool {
 /// 执行完整的密钥交换。
 /// `verify_host_key` 由 [Client::kex] 从 `HostKeyPolicy` 包装得到：
 /// 校验通过则正常返回，校验失败则抛出 [HostKeyMismatch]。
-pub fn KexContext::drive(
+pub async fn KexContext::drive(
   self : KexContext,
-  read_packet : () -> Bytes raise SshError,
-  write_packet : (Bytes) -> Unit raise SshError,
+  read_packet : async () -> Bytes raise SshError,
+  write_packet : async (Bytes) -> Unit raise SshError,
   verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   if self.state != Initial {
     raise ProtocolError("kex: invalid state")
   }
-  let safe_read : () -> Bytes raise SshError = () => {
+  let safe_read : async () -> Bytes raise SshError = async fn() -> Bytes raise SshError {
     read_packet_skip_extensions(read_packet)
   }
 
@@ -598,10 +598,10 @@ pub fn KexContext::drive(
 }
 
 ///|
-fn KexContext::drive_ecdh(
+async fn KexContext::drive_ecdh(
   self : KexContext,
-  read_packet : () -> Bytes raise SshError,
-  write_packet : (Bytes) -> Unit raise SshError,
+  read_packet : async () -> Bytes raise SshError,
+  write_packet : async (Bytes) -> Unit raise SshError,
   verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   // a. 生成 ECDH 密钥对
@@ -682,10 +682,10 @@ fn KexContext::drive_ecdh(
 }
 
 ///|
-fn KexContext::drive_dh(
+async fn KexContext::drive_dh(
   self : KexContext,
-  read_packet : () -> Bytes raise SshError,
-  write_packet : (Bytes) -> Unit raise SshError,
+  read_packet : async () -> Bytes raise SshError,
+  write_packet : async (Bytes) -> Unit raise SshError,
   verify_host_key : (String, Bytes) -> Unit raise SshError,
 ) -> Unit raise SshError {
   let p = @crypto.dh_group14_prime()
@@ -775,8 +775,8 @@ fn KexContext::drive_dh(
 // ============== Skip extension messages ==============
 
 ///|
-fn read_packet_skip_extensions(
-  raw_read : () -> Bytes raise SshError,
+async fn read_packet_skip_extensions(
+  raw_read : async () -> Bytes raise SshError,
 ) -> Bytes raise SshError {
   while true {
     let pkt = raw_read()

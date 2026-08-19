@@ -219,7 +219,7 @@ fn decode_sftp_packet(data : Bytes) -> SftpPacket raise SshError {
 
 ///|
 /// 从 SSH channel 中读取一个完整的 SFTP 数据包
-fn sftp_recv(client : Client, channel : Channel) -> Bytes raise SshError {
+async fn sftp_recv(client : Client, channel : Channel) -> Bytes raise SshError {
   while true {
     let payload = client.read_packet()
     let responses = channel.handle_inbound(payload)
@@ -248,7 +248,10 @@ fn sftp_recv(client : Client, channel : Channel) -> Bytes raise SshError {
 
 ///|
 /// 等待 channel open confirmation
-fn recv_until_open(client : Client, channel : Channel) -> Unit raise SshError {
+async fn recv_until_open(
+  client : Client,
+  channel : Channel,
+) -> Unit raise SshError {
   while channel.state() != Open && channel.state() != Done {
     let payload = client.read_packet()
     let responses = channel.handle_inbound(payload)
@@ -263,7 +266,7 @@ fn recv_until_open(client : Client, channel : Channel) -> Unit raise SshError {
 
 ///|
 /// 等待 subsystem ready
-fn recv_until_subsystem_ready(
+async fn recv_until_subsystem_ready(
   client : Client,
   channel : Channel,
 ) -> Unit raise SshError {
@@ -287,7 +290,7 @@ fn recv_until_subsystem_ready(
 
 ///|
 /// 打开 SFTP 通道（subsystem 请求 + INIT/VERSION 握手）
-pub fn SftpClient::open(client : Client) -> SftpClient raise SshError {
+pub async fn SftpClient::open(client : Client) -> SftpClient raise SshError {
   // 1. 打开 session channel
   let channel = Channel::new(0)
   let open_msg = build_channel_open(channel.id(), 1024 * 1024, 32 * 1024)
@@ -338,7 +341,7 @@ fn SftpClient::next_id(self : SftpClient) -> Int {
 
 ///|
 /// 发送 SFTP 请求并等待匹配响应
-fn SftpClient::send_recv(
+async fn SftpClient::send_recv(
   self : SftpClient,
   typ : Byte,
   payload : Bytes,
@@ -466,7 +469,7 @@ fn[T] raise_status(data : Bytes) -> T raise SshError {
 
 ///|
 /// 打开文件
-pub fn SftpClient::open_file(
+pub async fn SftpClient::open_file(
   self : SftpClient,
   path : String,
   flags : Int,
@@ -488,7 +491,7 @@ pub fn SftpClient::open_file(
 
 ///|
 /// 读文件
-pub fn SftpClient::read(
+pub async fn SftpClient::read(
   self : SftpClient,
   handle : Bytes,
   offset : Int,
@@ -513,7 +516,7 @@ pub fn SftpClient::read(
 
 ///|
 /// 写文件
-pub fn SftpClient::write(
+pub async fn SftpClient::write(
   self : SftpClient,
   handle : Bytes,
   offset : Int,
@@ -533,7 +536,7 @@ pub fn SftpClient::write(
 
 ///|
 /// 关闭句柄
-pub fn SftpClient::close_handle(
+pub async fn SftpClient::close_handle(
   self : SftpClient,
   handle : Bytes,
 ) -> Unit raise SshError {
@@ -548,7 +551,7 @@ pub fn SftpClient::close_handle(
 
 ///|
 /// 获取文件属性
-pub fn SftpClient::stat(
+pub async fn SftpClient::stat(
   self : SftpClient,
   path : String,
 ) -> SftpAttrs raise SshError {
@@ -564,7 +567,7 @@ pub fn SftpClient::stat(
 
 ///|
 /// 打开目录
-fn SftpClient::opendir(
+async fn SftpClient::opendir(
   self : SftpClient,
   path : String,
 ) -> Bytes raise SshError {
@@ -583,7 +586,7 @@ fn SftpClient::opendir(
 
 ///|
 /// 列目录
-pub fn SftpClient::readdir(
+pub async fn SftpClient::readdir(
   self : SftpClient,
   handle : Bytes,
 ) -> Array[SftpDirEntry]? raise SshError {
@@ -607,7 +610,7 @@ pub fn SftpClient::readdir(
 
 ///|
 /// 删除文件
-pub fn SftpClient::remove(
+pub async fn SftpClient::remove(
   self : SftpClient,
   path : String,
 ) -> Unit raise SshError {
@@ -622,7 +625,7 @@ pub fn SftpClient::remove(
 
 ///|
 /// 创建目录
-pub fn SftpClient::mkdir(
+pub async fn SftpClient::mkdir(
   self : SftpClient,
   path : String,
   permissions : Int,
@@ -640,7 +643,7 @@ pub fn SftpClient::mkdir(
 
 ///|
 /// 删除目录
-pub fn SftpClient::rmdir(
+pub async fn SftpClient::rmdir(
   self : SftpClient,
   path : String,
 ) -> Unit raise SshError {
@@ -655,7 +658,7 @@ pub fn SftpClient::rmdir(
 
 ///|
 /// 重命名
-pub fn SftpClient::rename(
+pub async fn SftpClient::rename(
   self : SftpClient,
   oldpath : String,
   newpath : String,
@@ -672,7 +675,7 @@ pub fn SftpClient::rename(
 
 ///|
 /// 解析真实路径
-pub fn SftpClient::realpath(
+pub async fn SftpClient::realpath(
   self : SftpClient,
   path : String,
 ) -> String raise SshError {
@@ -695,7 +698,7 @@ pub fn SftpClient::realpath(
 
 ///|
 /// 设置文件属性
-fn SftpClient::setstat(
+async fn SftpClient::setstat(
   self : SftpClient,
   path : String,
   permissions : Int,
@@ -715,7 +718,7 @@ fn SftpClient::setstat(
 
 ///|
 /// 读取整个文件（自动分块）
-pub fn SftpClient::read_file(
+pub async fn SftpClient::read_file(
   self : SftpClient,
   path : String,
 ) -> Bytes raise SshError {
@@ -750,7 +753,7 @@ pub fn SftpClient::read_file(
 
 ///|
 /// 写入整个文件（自动分块）
-pub fn SftpClient::write_file(
+pub async fn SftpClient::write_file(
   self : SftpClient,
   path : String,
   data : Bytes,
@@ -782,7 +785,7 @@ pub fn SftpClient::write_file(
 
 ///|
 /// 列出目录内容
-pub fn SftpClient::listdir(
+pub async fn SftpClient::listdir(
   self : SftpClient,
   path : String,
 ) -> Array[SftpDirEntry] raise SshError {
@@ -816,7 +819,7 @@ pub fn SftpClient::listdir(
 
 ///|
 /// 关闭 SFTP 通道
-pub fn SftpClient::close(self : SftpClient) -> Unit {
+pub async fn SftpClient::close(self : SftpClient) -> Unit {
   let eof_msg = build_channel_eof(self.channel.peer_id())
   self.client.write_packet(eof_msg) catch {
     _ => ()

@@ -35,6 +35,10 @@ description = "SSHv2 client library for MoonBit with password and publickey auth
 
 preferred_target = "native"
 
+import {
+  "moonbitlang/async@0.21.0",
+}
+
 options(
   "include": [ "README.md", "README.mbt.md", "src", "cmd", "scripts" ],
 )
