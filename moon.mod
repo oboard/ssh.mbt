@@ -37,6 +37,10 @@ preferred_target = "native"
 
 import {
   "moonbitlang/async@0.21.0",
+  "cc06b/mooncry@0.20.0",
+  "Tigls/mb-p256@0.1.0",
+  "gmlewis/sha1@0.12.11",
+  "Rutubet/moon_rsa@0.2.0",
 }
 
 options(

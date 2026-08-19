@@ -43,9 +43,12 @@ test "wildcard_match/question" {
 }
 
 ///|
-test "pattern_matches/hashed_host_is_rejected" {
-  // hashed hosts start with "|1|"; we don't support them
-  inspect(pattern_matches("|1|abc/def=", "example.com"), content="false")
+test "pattern_matches/hashed_host_hmac_sha1" {
+  // RFC/OpenSSH form: |1|base64(salt)|base64(HMAC-SHA1(salt, host))
+  let pattern = "|1|MDEyMzQ1Njc4OWFiY2RlZmdoaWo=|jaHXoMQTU/+rEgquOJTQzPGCF4I="
+  inspect(pattern_matches(pattern, "example.com"), content="true")
+  inspect(pattern_matches(pattern, "other.example.com"), content="false")
+  inspect(pattern_matches("|1|bad|not-base64!", "example.com"), content="false")
 }
 
 ///|

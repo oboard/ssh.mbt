@@ -1,67 +1,33 @@
-///|
-/// 密码学工具函数：随机数生成、OpenSSL 错误处理。
-#borrow(buf)
-extern "C" fn rand_bytes_ffi(buf : FixedArray[Byte], num : Int) -> Int = "moonbitlang_ssh_rand_bytes"
-
-///|
-#borrow(buf)
-extern "C" fn err_get_error_string_ffi(buf : FixedArray[Byte]) -> Int = "moonbitlang_ssh_get_error_string"
-
-///|
-extern "C" fn err_clear_error_ffi() = "moonbitlang_ssh_clear_error"
-
-///|
-extern "C" fn err_peek_error_code_ffi() -> UInt = "moonbitlang_ssh_peek_error_code"
+///
+/// 密码学工具函数：随机数生成（使用 moonbitlang/async/tls rand_bytes）。
+/// 注：async/tls 的 rand_bytes 内部使用 OpenSSL RAND_bytes，
+/// 但本项目不再维护自己的 openssl.c，改为复用已有的系统 TLS 实现。
 
 ///|
 /// 生成 `num` 字节的密码学安全随机字节。
 pub fn rand_bytes(num : Int) -> Bytes raise CryptoError {
-  ensure_openssl()
-  let result = FixedArray::make(num, b'\x00')
-  let rc = rand_bytes_ffi(result, num)
-  if rc != 1 {
-    err_clear()
-    raise CryptoError::RandomFailed("RAND_bytes returned \{rc}")
+  @tls.rand_bytes(num) catch {
+    e => raise CryptoError::RandomFailed(Repr(e).to_string())
   }
-  Bytes::from_array(result)
 }
 
 ///|
-/// 获取 OpenSSL 错误队列中最上面的错误信息字符串。
+/// OpenSSL 错误兼容 stubs（纯 MoonBit 实现无 OpenSSL 错误队列）。
 pub fn err_get_error() -> String {
-  let buf = FixedArray::make(256, Byte::default())
-  let len = err_get_error_string_ffi(buf)
-  if len <= 0 {
-    return ""
-  }
-  ascii_bytes_to_string(buf, len)
+  ""
 }
 
 ///|
-/// 查看 OpenSSL 错误队列顶部的错误码（不弹出）。
 pub fn err_peek_code() -> UInt {
-  err_peek_error_code_ffi()
+  0U
 }
 
 ///|
-/// 清空 OpenSSL 错误队列。
 pub fn err_clear() -> Unit {
-  err_clear_error_ffi()
+  ()
 }
 
 ///|
-/// 获取并清空 OpenSSL 错误队列（组合操作）。
 pub fn err_get_and_clear() -> String {
-  let s = err_get_error()
-  err_clear()
-  s
-}
-
-///|
-fn ascii_bytes_to_string(buf : FixedArray[Byte], len : Int) -> String {
-  let mut s = ""
-  for i in 0..<len {
-    s = s + buf.unsafe_get(i).to_char().to_string()
-  }
-  s
+  ""
 }

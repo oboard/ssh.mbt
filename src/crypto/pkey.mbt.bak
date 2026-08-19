@@ -210,7 +210,7 @@ pub fn PKey::sign(
       let hash = if md_alg == 1 { @lib.sha1(data) } else { @lib.sha256(data) }
       let priv_arr = b2u(self.ec_priv)
       let hash_fixed = b2u_fixed32(hash)
-      match @mb-p256.ecdsa_sign(priv_arr, hash_fixed) {
+      match @p256.ecdsa_sign(priv_arr, hash_fixed) {
         Ok(sig) => ecdsa_sig_to_der(sig.r, sig.s)
         Err(e) => raise CryptoError::OperationFailed("ecdsa_sign", e)
       }
@@ -252,8 +252,8 @@ pub fn PKey::verify(
         Ok(rs) => rs
         Err(e) => raise CryptoError::OperationFailed("parse_ecdsa_sig", e)
       }
-      let sig_obj : @mb-p256.ECDSASignature = { r, s }
-      match @mb-p256.ecdsa_verify(pub_arr, hash_fixed, sig_obj) {
+      let sig_obj = { r, s }
+      match @p256.ecdsa_verify(pub_arr, hash_fixed, sig_obj) {
         Ok(b) => b
         Err(e) => raise CryptoError::OperationFailed("ecdsa_verify", e)
       }
@@ -268,7 +268,7 @@ pub fn PKey::verify(
 pub fn ecdh_nistp256_generate() -> (PKey, Bytes) raise CryptoError {
   let priv_bytes = rand_bytes(32)
   let priv_arr = b2u(priv_bytes)
-  match @mb-p256.derive_public_key(priv_arr) {
+  match @p256.derive_public_key(priv_arr) {
     Ok(pub_arr) => {
       let pub_bytes = u2b(pub_arr)
       let pkey = {
@@ -288,7 +288,7 @@ pub fn ecdh_nistp256_derive(
   our : PKey,
   peer_pub_sec1 : Bytes,
 ) -> Bytes raise CryptoError {
-  match @mb-p256.ecdh_bytes(our.ec_priv, peer_pub_sec1) {
+  match @p256.ecdh_bytes(our.ec_priv, peer_pub_sec1) {
     Ok(shared) => shared
     Err(e) => raise CryptoError::OperationFailed("ecdh_nistp256_derive", e)
   }
@@ -330,7 +330,7 @@ pub fn base64_decode(s : String) -> Bytes raise CryptoError {
     if c == '=' || c == '\n' || c == '\r' || c == ' ' {
       continue
     }
-    let v = match table.get(c) {
+    let v = match table[c] {
       Some(x) => x
       None =>
         raise CryptoError::OperationFailed("base64_decode", "invalid char")

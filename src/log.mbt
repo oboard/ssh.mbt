@@ -1,28 +1,21 @@
 ///|
 /// SSH 调试日志模块。
 /// 通过全局开关控制调试输出，仅在启用时输出日志和 hex dump。
-/// 同时控制 C 层面（socket / openssl）的调试输出。
 
 ///|
 /// 全局调试开关。默认关闭。
-/// 通过 `enable_debug()` / `disable_debug()` 控制，或通过命令行 `--debug` 参数开启。
 let debug_enabled : Ref[Bool] = Ref(false)
 
 ///|
-extern "C" fn openssl_set_debug(val : Int) -> Unit = "moonbitlang_ssh_set_debug"
-
-///|
-/// 启用调试输出（同时控制 MoonBit 层和 C 层）。
+/// 启用调试输出。
 pub fn enable_debug() -> Unit {
   debug_enabled.val = true
-  openssl_set_debug(1)
 }
 
 ///|
 /// 禁用调试输出。
 pub fn disable_debug() -> Unit {
   debug_enabled.val = false
-  openssl_set_debug(0)
 }
 
 ///|
@@ -32,7 +25,7 @@ pub fn is_debug_enabled() -> Bool {
 }
 
 ///|
-/// 仅在调试模式开启时输出日志。用法与 println 一致。
+/// 仅在调试模式开启时输出日志。
 pub fn debug(msg : String) -> Unit {
   if debug_enabled.val {
     println(msg)
@@ -40,7 +33,6 @@ pub fn debug(msg : String) -> Unit {
 }
 
 ///|
-/// 将 4 位半字节（0-15）转为十六进制字符。
 fn hex_nibble_to_string(n : Int) -> String {
   if n < 10 {
     (n + 48).unsafe_to_char().to_string()
@@ -51,10 +43,6 @@ fn hex_nibble_to_string(n : Int) -> String {
 
 ///|
 /// 以 Wireshark 风格打印字节的 hex dump（仅调试模式）。
-/// 输出格式：
-///   * label:
-///
-///   00000:  3b 12 1a 82 6e c4 20 bd ff a1 6c 99 a9 f6 5d 9b  ;...n. ...l...].
 pub fn hex_dump(label : String, data : Bytes) -> Unit {
   if !debug_enabled.val {
     return

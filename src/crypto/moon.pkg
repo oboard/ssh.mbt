@@ -1,10 +1,13 @@
 import {
   "moonbitlang/core/bigint",
   "moonbitlang/core/encoding/utf8",
+  "cc06b/mooncry/lib",
+  "moonbitlang/async/tls",
+  "Tigls/mb-p256",
 }
 
 options(
-  "native-stub": [ "openssl.c" ],
+  "native-stub": [ "file_util.c" ],
   targets: {
     "digest.mbt": [ "native" ],
     "mac.mbt": [ "native" ],
@@ -12,7 +15,6 @@ options(
     "kex.mbt": [ "native" ],
     "pkey.mbt": [ "native" ],
     "crypto_util.mbt": [ "native" ],
-    "openssl_loader.mbt": [ "native" ],
     "cipher_wbtest.mbt": [ "native" ],
     "digest_wbtest.mbt": [ "native" ],
     "mac_wbtest.mbt": [ "native" ],

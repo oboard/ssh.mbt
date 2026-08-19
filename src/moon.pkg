@@ -5,6 +5,7 @@ import {
   "moonbitlang/async",
   "moonbitlang/async/socket",
   "moonbitlang/async/io",
+  "cc06b/mooncry/lib",
   "PaiGack/ssh_client/src/crypto",
 }
 
@@ -28,5 +29,10 @@ options(
     "sftp_wbtest.mbt": [ "native" ],
     "known_hosts.mbt": [ "native" ],
     "known_hosts_wbtest.mbt": [ "native" ],
+    "agent.mbt": [ "native" ],
+    "agent_wbtest.mbt": [ "native" ],
+    "server.mbt": [ "native" ],
+    "terminal.mbt": [ "native" ],
+    "async_socket.mbt": [ "native" ],
   },
 )

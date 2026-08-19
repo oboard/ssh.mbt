@@ -38,15 +38,36 @@ pub fn KnownHost::matches(self : KnownHost, host : String, port : Int) -> Bool {
 
 ///|
 /// 检查单个模式是否匹配目标主机名。
-/// 不支持 hashed 形式（`|1|...`）；支持 `*` 和 `?` 通配符。
+/// 支持 OpenSSH `|1|base64-salt|base64-hmac-sha1` hashed-host 格式，
+/// 以及 `*` / `?` 通配符。
 fn pattern_matches(pat : String, host : String) -> Bool {
   if pat.has_prefix("|1|") {
-    return false
-  } // hashed form not supported
+    return hashed_host_matches(pat, host)
+  }
   if !(pat.contains("*") || pat.contains("?")) {
     return pat == host
   }
   wildcard_match(pat, host)
+}
+
+///|
+/// 验证 OpenSSH hashed known_hosts pattern（`|1|salt|HMAC-SHA1(salt, host)`）。
+/// 无效编码、未知版本或非 20 字节的 SHA-1 tag 统一视为不匹配。
+fn hashed_host_matches(pattern : String, host : String) -> Bool {
+  let arr : Array[String] = []
+  for s in pattern.split("|") {
+    arr.push(s.to_owned())
+  }
+  if arr.length() != 4 || arr[0] != "" || arr[1] != "1" {
+    return false
+  }
+  let salt = decode_base64(arr[2]) catch { _ => return false }
+  let expected = decode_base64(arr[3]) catch { _ => return false }
+  if expected.length() != 20 {
+    return false
+  }
+  let actual = @lib.hmac_sha1(salt, @utf8.encode(host))
+  actual == expected
 }
 
 ///|
