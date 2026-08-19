@@ -61,7 +61,7 @@ test "ssh_client/connect_options_with_strict_known_hosts" {
   let opts = ConnectOptions::new("example.com", 22, "user").with_strict_host_key_check(
     kh,
   ) catch {
-    e => fail("with_strict_host_key_check: \{to_repr(e)}")
+    e => fail("with_strict_host_key_check: \{Repr(e)}")
   }
   // alg 与 key 匹配 -> Accept
   let good = verify_host_key(
@@ -97,7 +97,7 @@ test "ssh_client/connect_options_with_trust_on_first_use" {
   let opts = ConnectOptions::new("example.com", 22, "user").with_trust_on_first_use(
     kh, prompt,
   ) catch {
-    e => fail("with_trust_on_first_use: \{to_repr(e)}")
+    e => fail("with_trust_on_first_use: \{Repr(e)}")
   }
   let key = b"firstkey"
   let first = verify_host_key(
@@ -249,7 +249,7 @@ test "ssh_client/connect_options_with_strict_empty_content" {
   let opts = ConnectOptions::new("host", 22, "user").with_strict_host_key_check(
     "",
   ) catch {
-    e => fail("with_strict_host_key_check empty: \{to_repr(e)}")
+    e => fail("with_strict_host_key_check empty: \{Repr(e)}")
   }
   let decision = verify_host_key(
     opts.host_key_policy,
@@ -268,7 +268,7 @@ test "ssh_client/connect_options_with_strict_bad_line_skipped" {
   let opts = ConnectOptions::new("example.com", 22, "user").with_strict_host_key_check(
     content,
   ) catch {
-    e => fail("with_strict_host_key_check: \{to_repr(e)}")
+    e => fail("with_strict_host_key_check: \{Repr(e)}")
   }
   // 条目存在，但 key 不匹配 -> RejectMismatch
   let decision = verify_host_key(
@@ -288,7 +288,7 @@ test "ssh_client/connect_options_tofu_reject_changed_key" {
   let opts = ConnectOptions::new("host", 22, "user").with_trust_on_first_use(
     "", prompt,
   ) catch {
-    e => fail("tofu: \{to_repr(e)}")
+    e => fail("tofu: \{Repr(e)}")
   }
   // 第一次：接受
   let first = verify_host_key(
@@ -317,7 +317,7 @@ test "ssh_client/connect_options_tofu_prompt_reject" {
   let opts = ConnectOptions::new("host", 22, "user").with_trust_on_first_use(
     "", prompt,
   ) catch {
-    e => fail("tofu reject: \{to_repr(e)}")
+    e => fail("tofu reject: \{Repr(e)}")
   }
   let decision = verify_host_key(
     opts.host_key_policy,

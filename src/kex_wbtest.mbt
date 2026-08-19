@@ -448,7 +448,7 @@ test "kex/compute_ecdh_exchange_hash_deterministic" {
     q_s,
     k,
   ) catch {
-    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_ecdh_exchange_hash: \{Repr(e)}")
   }
   let h2 = compute_ecdh_exchange_hash(
     @crypto.Algorithm::sha256(),
@@ -461,7 +461,7 @@ test "kex/compute_ecdh_exchange_hash_deterministic" {
     q_s,
     k,
   ) catch {
-    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_ecdh_exchange_hash: \{Repr(e)}")
   }
   // SHA-256 输出 32 字节
   inspect(h1.length(), content="32")
@@ -498,7 +498,7 @@ test "kex/compute_ecdh_exchange_hash_different_input" {
     q_s,
     k1,
   ) catch {
-    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_ecdh_exchange_hash: \{Repr(e)}")
   }
   let h2 = compute_ecdh_exchange_hash(
     @crypto.Algorithm::sha256(),
@@ -511,7 +511,7 @@ test "kex/compute_ecdh_exchange_hash_different_input" {
     q_s,
     k2,
   ) catch {
-    e => fail("compute_ecdh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_ecdh_exchange_hash: \{Repr(e)}")
   }
   // 不同 shared_secret -> 不同哈希
   let mut diff = false
@@ -547,7 +547,7 @@ test "kex/compute_dh_exchange_hash_deterministic" {
     f,
     k,
   ) catch {
-    e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_dh_exchange_hash: \{Repr(e)}")
   }
   let h2 = compute_dh_exchange_hash(
     @crypto.Algorithm::sha256(),
@@ -560,7 +560,7 @@ test "kex/compute_dh_exchange_hash_deterministic" {
     f,
     k,
   ) catch {
-    e => fail("compute_dh_exchange_hash: \{to_repr(e)}")
+    e => fail("compute_dh_exchange_hash: \{Repr(e)}")
   }
   inspect(h1.length(), content="32")
   let mut same = true
@@ -594,7 +594,7 @@ test "kex/compute_dh_exchange_hash_sha1" {
     f,
     k,
   ) catch {
-    e => fail("compute_dh_exchange_hash sha1: \{to_repr(e)}")
+    e => fail("compute_dh_exchange_hash sha1: \{Repr(e)}")
   }
   // SHA-1 输出 20 字节
   inspect(h.length(), content="20")
@@ -618,7 +618,7 @@ test "kex/derive_keys_sha256" {
     16,
     32,
   ) catch {
-    e => fail("derive_keys: \{to_repr(e)}")
+    e => fail("derive_keys: \{Repr(e)}")
   }
   // IV 长度 = 16
   inspect(iv_c2s.length(), content="16")
@@ -639,7 +639,7 @@ test "kex/derive_keys_sha256" {
     16,
     32,
   ) catch {
-    e => fail("derive_keys 2: \{to_repr(e)}")
+    e => fail("derive_keys 2: \{Repr(e)}")
   }
   let mut same = true
   for i in 0..<iv_c2s.length() {
@@ -666,7 +666,7 @@ test "kex/derive_keys_different_k_different_output" {
     16,
     32,
   ) catch {
-    e => fail("derive_keys k1: \{to_repr(e)}")
+    e => fail("derive_keys k1: \{Repr(e)}")
   }
   let (iv2, _, _, _, _, _) = derive_keys(
     @crypto.Algorithm::sha256(),
@@ -677,7 +677,7 @@ test "kex/derive_keys_different_k_different_output" {
     16,
     32,
   ) catch {
-    e => fail("derive_keys k2: \{to_repr(e)}")
+    e => fail("derive_keys k2: \{Repr(e)}")
   }
   let mut diff = false
   for i in 0..<iv1.length() {
@@ -719,7 +719,7 @@ test "kex/derive_keys_needs_multi_round_kdf" {
     48,
     48,
   ) catch {
-    e => fail("derive_keys multi-round: \{to_repr(e)}")
+    e => fail("derive_keys multi-round: \{Repr(e)}")
   }
   // 所有派生密钥应为请求的 48 字节
   inspect(iv_c2s.length(), content="48")
@@ -754,7 +754,7 @@ test "kex/derive_keys_exact_hash_length" {
     32,
     32,
   ) catch {
-    e => fail("derive_keys exact: \{to_repr(e)}")
+    e => fail("derive_keys exact: \{Repr(e)}")
   }
   inspect(iv.length(), content="32")
 }
@@ -775,7 +775,7 @@ test "kex/derive_keys_sha1" {
     16,
     20,
   ) catch {
-    e => fail("derive_keys sha1: \{to_repr(e)}")
+    e => fail("derive_keys sha1: \{Repr(e)}")
   }
   inspect(iv.length(), content="16")
   inspect(ek.length(), content="16")

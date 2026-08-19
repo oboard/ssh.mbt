@@ -21,33 +21,33 @@ fn main {
   let parsed = parse_args(argv)
   let opts = parsed.opts.with_insecure_host_key()
   let client = @src.Client::connect(opts) catch {
-    e => abort("connect: \{to_repr(e)}")
+    e => abort("connect: \{Repr(e)}")
   }
   defer client.close()
   client.kex() catch {
-    e => abort("kex: \{to_repr(e)}")
+    e => abort("kex: \{Repr(e)}")
   }
   client.auth_auto(parsed.password) catch {
-    e => abort("auth: \{to_repr(e)}")
+    e => abort("auth: \{Repr(e)}")
   }
 
   match parsed.mode {
     Local(lp, rh, rp) => {
       println("Forwarding 127.0.0.1:\{lp} → \{rh}:\{rp}")
       client.forward_local_port(lp, rh, rp) catch {
-        e => abort("forward: \{to_repr(e)}")
+        e => abort("forward: \{Repr(e)}")
       }
     }
     Remote(rp, lh, lp) => {
       println("Remote forwarding port \{rp} → \{lh}:\{lp}")
       client.forward_remote_port(rp, lh, lp) catch {
-        e => abort("forward: \{to_repr(e)}")
+        e => abort("forward: \{Repr(e)}")
       }
     }
     Socks5(sp) => {
       println("SOCKS5 proxy listening on 127.0.0.1:\{sp}")
       client.forward_socks5(sp) catch {
-        e => abort("forward: \{to_repr(e)}")
+        e => abort("forward: \{Repr(e)}")
       }
     }
   }

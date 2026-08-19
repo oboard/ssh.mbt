@@ -497,4 +497,3 @@ pub fn Writer::write_uint32(Self, Int) -> Unit
 // Type aliases
 
 // Traits
-

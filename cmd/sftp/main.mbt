@@ -16,26 +16,26 @@ fn main {
   let (opts, password, command, paths) = parse_args(argv)
   let opts = opts.with_insecure_host_key()
   let client = @src.Client::connect(opts) catch {
-    e => abort("connect: \{to_repr(e)}")
+    e => abort("connect: \{Repr(e)}")
   }
   defer client.close()
 
   client.kex() catch {
-    e => abort("kex: \{to_repr(e)}")
+    e => abort("kex: \{Repr(e)}")
   }
   client.auth_auto(password) catch {
-    e => abort("auth: \{to_repr(e)}")
+    e => abort("auth: \{Repr(e)}")
   }
 
   // 打开 SFTP 会话
   let sftp = @src.SftpClient::open(client) catch {
-    e => abort("open: \{to_repr(e)}")
+    e => abort("open: \{Repr(e)}")
   }
   defer sftp.close()
 
   // 执行命令
   cmd(sftp, command, paths) catch {
-    e => abort("cmd: \{to_repr(e)}")
+    e => abort("cmd: \{Repr(e)}")
   }
 }
 

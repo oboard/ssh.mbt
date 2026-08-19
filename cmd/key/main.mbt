@@ -16,19 +16,19 @@ fn main {
   let (opts, key_path, command) = parse_args(argv)
   let opts = opts.with_insecure_host_key()
   let client = @src.Client::connect(opts) catch {
-    e => abort("connect: \{to_repr(e)}")
+    e => abort("connect: \{Repr(e)}")
   }
   defer client.close()
   client.kex() catch {
-    e => abort("kex: \{to_repr(e)}")
+    e => abort("kex: \{Repr(e)}")
   }
   client.auth_publickey(key_path) catch {
-    e => abort("auth: \{to_repr(e)}")
+    e => abort("auth: \{Repr(e)}")
   }
 
   let ch = client.open_session()
   let (stdout, stderr) = client.exec(ch, command) catch {
-    e => abort("exec: \{to_repr(e)}")
+    e => abort("exec: \{Repr(e)}")
   }
   if stdout.length() > 0 {
     println(stdout)

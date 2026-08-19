@@ -404,7 +404,7 @@ test "base64/roundtrip_short" {
   let original = Bytes::from_array([b'\x00', b'\xff', b'\x7f', b'\x80'])
   let encoded = encode_base64(original)
   let decoded = decode_base64(encoded) catch {
-    e => fail("decode_base64: \{to_repr(e)}")
+    e => fail("decode_base64: \{Repr(e)}")
   }
   inspect(decoded.length(), content="4")
   inspect(decoded[0].to_int(), content="0")
@@ -417,7 +417,7 @@ test "base64/roundtrip_short" {
 test "base64/roundtrip_empty" {
   let encoded = encode_base64(b"")
   let decoded = decode_base64(encoded) catch {
-    e => fail("decode_base64 empty: \{to_repr(e)}")
+    e => fail("decode_base64 empty: \{Repr(e)}")
   }
   inspect(decoded.length(), content="0")
 }
@@ -429,7 +429,7 @@ test "base64/roundtrip_longer" {
   ])
   let encoded = encode_base64(original)
   let decoded = decode_base64(encoded) catch {
-    e => fail("decode_base64 longer: \{to_repr(e)}")
+    e => fail("decode_base64 longer: \{Repr(e)}")
   }
   let mut same = true
   for i in 0..<original.length() {
@@ -447,7 +447,7 @@ test "base64/decode_ignores_whitespace" {
   // 插入空格和换行
   let with_spaces = "\{encoded} \n \r"
   let decoded = decode_base64(with_spaces) catch {
-    e => fail("decode_base64 spaces: \{to_repr(e)}")
+    e => fail("decode_base64 spaces: \{Repr(e)}")
   }
   inspect(decoded.length(), content="2")
   inspect(decoded[0].to_int(), content="171") // 0xab

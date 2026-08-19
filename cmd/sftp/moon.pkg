@@ -4,7 +4,8 @@ import {
   "PaiGack/ssh_client/cmd/utils",
 }
 
+pkgtype(kind: "executable")
+
 options(
-  is_main: true,
   supported_targets: "+native",
 )
